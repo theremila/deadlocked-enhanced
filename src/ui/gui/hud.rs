@@ -128,6 +128,13 @@ impl AppState {
                 }
                 text_settings_button(ui, &mut self.text_popup, "spectator_list");
             });
+
+            ui.horizontal(|ui| {
+                if checkbox(ui, "Status Indicators", &mut self.config.hud.status_indicators) {
+                    self.send_config();
+                }
+                text_settings_button(ui, &mut self.text_popup, "status_text");
+            });
         });
 
         ui.collapsing("Sniper Crosshair", |ui| {
