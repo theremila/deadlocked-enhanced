@@ -54,7 +54,7 @@ impl Font {
             .get_mut(&FontFamily::Proportional)
             .unwrap();
         proportional.insert(0, String::from(primary));
-        proportional.push(String::from("icons"));
+        proportional.insert(0, String::from("icons"));
         ctx.set_fonts(font_defs);
     }
 
