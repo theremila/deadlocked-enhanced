@@ -515,7 +515,7 @@ impl Player {
         cs2.process.read(self.pawn + cs2.offsets.pawn.velocity)
     }
 
-    fn is_in_air(&self, cs2: &CS2) -> bool {
+    pub fn is_in_air(&self, cs2: &CS2) -> bool {
         let flags = cs2.process.read::<i32>(self.pawn + cs2.offsets.pawn.flags);
         // FL_ONGROUND = (1 << 0)
         (flags & 1) == 0

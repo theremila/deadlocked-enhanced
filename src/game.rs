@@ -98,6 +98,6 @@ impl GameManager {
     }
 
     fn loop_duration(&self) -> Duration {
-        Duration::from_millis(10)
+        Duration::from_millis(2)
     }
 }

@@ -13,7 +13,10 @@ use crate::{
         entity::{
             Entity, EntityInfo, grenade_info, planted_c4::PlantedC4, player::Player, weapon::Weapon,
         },
-        features::{aimbot::Aimbot, esp_toggle::EspToggle, rcs::Recoil, triggerbot::Triggerbot},
+        features::{
+            aimbot::Aimbot, bhop::Bunnyhop, esp_toggle::EspToggle, rcs::Recoil,
+            triggerbot::Triggerbot,
+        },
         input::Input,
         key_codes::KeyCode,
         offsets::Offsets,
@@ -50,6 +53,7 @@ pub struct CS2 {
     recoil: Recoil,
     aim: Aimbot,
     trigger: Triggerbot,
+    bhop: Bunnyhop,
     esp: EspToggle,
     weapon: Weapon,
     planted_c4: Option<PlantedC4>,
@@ -111,6 +115,7 @@ impl CS2 {
 
         self.no_flash(config);
         self.fov_changer(config);
+        self.bunnyhop(config, mouse);
 
         self.esp_toggle(config);
 
@@ -206,7 +211,7 @@ impl CS2 {
             health: local_player.health(self),
             armor: local_player.armor(self),
             position: local_player.position(self),
-            head: local_player.bone_position(self, Bones::Head.u64()),
+            head: local_player.eye_position(self),
             name: local_player.name(self),
             weapon: local_player.weapon(self),
             ammo: (
@@ -293,6 +298,7 @@ impl CS2 {
             recoil: Recoil::default(),
             aim: Aimbot::default(),
             trigger: Triggerbot::default(),
+            bhop: Bunnyhop::default(),
             esp: EspToggle::default(),
             weapon: Weapon::default(),
             planted_c4: None,

@@ -2,7 +2,7 @@ use egui::{DragValue, Ui};
 
 use crate::ui::{
     app::AppState,
-    gui::helpers::{collapsing_open, color_picker},
+    gui::helpers::{checkbox, collapsing_open, color_picker, keybind},
 };
 
 impl AppState {
@@ -50,6 +50,21 @@ impl AppState {
     }
 
     fn unsafe_left(&mut self, ui: &mut Ui) {
+        collapsing_open(ui, "Bunnyhop", |ui| {
+            if checkbox(ui, "Enable Bunnyhop", &mut self.config.misc.bunnyhop) {
+                self.send_config();
+            }
+
+            if keybind(
+                ui,
+                "bunnyhop_hotkey",
+                "Hotkey",
+                &mut self.config.misc.bunnyhop_hotkey,
+            ) {
+                self.send_config();
+            }
+        });
+
         collapsing_open(ui, "No Flash", |ui| {
             if ui
                 .checkbox(&mut self.config.misc.no_flash, "No Flash")
