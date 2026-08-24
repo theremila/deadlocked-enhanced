@@ -7,7 +7,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use glam::{IVec2, Vec2};
+use glam::Vec2;
 use nix::{ioctl_none, ioctl_write_int, ioctl_write_ptr, libc::c_ulong};
 
 #[derive(Clone, Copy)]
@@ -89,10 +89,13 @@ const EV_REL: u16 = 0x02;
 const SYN_REPORT: u16 = 0x00;
 const AXIS_X: u16 = 0x00;
 const AXIS_Y: u16 = 0x01;
+const AXIS_WHEEL: u16 = 0x08;
 const BTN_LEFT: u16 = 0x110;
+const KEY_SPACE: u16 = 57;
 
 pub struct Mouse {
     file: File,
+    fractional: Vec2,
 }
 
 static CREATED: AtomicBool = AtomicBool::new(false);
@@ -115,18 +118,31 @@ impl Mouse {
 
             ui_set_relbit(fd, AXIS_X as u64).map_err(|e| e.to_string())?;
             ui_set_relbit(fd, AXIS_Y as u64).map_err(|e| e.to_string())?;
+            ui_set_relbit(fd, AXIS_WHEEL as u64).map_err(|e| e.to_string())?;
 
             ui_set_keybit(fd, BTN_LEFT as u64).map_err(|e| e.to_string())?;
+            ui_set_keybit(fd, KEY_SPACE as u64).map_err(|e| e.to_string())?;
 
             ui_dev_setup(fd, &DEVICE_SETUP).map_err(|e| e.to_string())?;
             ui_dev_create(fd).map_err(|e| e.to_string())?;
         }
 
-        Ok(Self { file })
+        Ok(Self {
+            file,
+            fractional: Vec2::ZERO,
+        })
     }
 
     pub fn move_rel(&mut self, coords: Vec2) {
-        let coords = IVec2::new(coords.x as i32, coords.y as i32);
+        let total = coords + self.fractional;
+        let int_x = total.x.trunc() as i32;
+        let int_y = total.y.trunc() as i32;
+        self.fractional.x = total.x - int_x as f32;
+        self.fractional.y = total.y - int_y as f32;
+
+        if int_x == 0 && int_y == 0 {
+            return;
+        }
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         let time = Timeval {
@@ -138,14 +154,14 @@ impl Mouse {
             time,
             event_type: EV_REL,
             code: AXIS_X,
-            value: coords.x,
+            value: int_x,
         };
 
         let y = InputEvent {
             time,
             event_type: EV_REL,
             code: AXIS_Y,
-            value: coords.y,
+            value: int_y,
         };
 
         let syn = InputEvent {
@@ -162,15 +178,54 @@ impl Mouse {
         self.file.write_all(&syn.bytes()).unwrap();
     }
 
+    pub fn scroll_down(&mut self) {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        let time = Timeval {
+            seconds: now.as_secs(),
+            microseconds: now.subsec_micros() as u64,
+        };
+
+        let wheel = InputEvent {
+            time,
+            event_type: EV_REL,
+            code: AXIS_WHEEL,
+            value: -1,
+        };
+
+        let syn = InputEvent {
+            time,
+            event_type: EV_SYN,
+            code: SYN_REPORT,
+            value: 0,
+        };
+
+        let _ = self.file.write_all(&wheel.bytes());
+        let _ = self.file.write_all(&syn.bytes());
+    }
+
+    pub fn scroll_down_burst(&mut self, count: usize) {
+        for _ in 0..count {
+            self.scroll_down();
+        }
+    }
+
     pub fn left_press(&mut self) {
-        self.key(1);
+        self.key(BTN_LEFT, 1);
     }
 
     pub fn left_release(&mut self) {
-        self.key(0);
+        self.key(BTN_LEFT, 0);
     }
 
-    fn key(&mut self, pressed: i32) {
+    pub fn space_press(&mut self) {
+        self.key(KEY_SPACE, 1);
+    }
+
+    pub fn space_release(&mut self) {
+        self.key(KEY_SPACE, 0);
+    }
+
+    fn key(&mut self, code: u16, pressed: i32) {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         let time = Timeval {
             seconds: now.as_secs(),
@@ -180,7 +235,7 @@ impl Mouse {
         let press = InputEvent {
             time,
             event_type: EV_KEY,
-            code: BTN_LEFT,
+            code,
             value: pressed,
         };
 
