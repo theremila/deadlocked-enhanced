@@ -37,6 +37,11 @@ pub struct PlayerConfig {
     pub weapon_icon: bool,
     pub tags: bool,
     pub visible_only: bool,
+    pub oof_arrows: bool,
+    pub oof_offscreen_only: bool,
+    pub oof_radius: f32,
+    pub oof_size: f32,
+    pub oof_color: Color32,
     pub sound: SoundConfig,
 }
 
@@ -60,6 +65,11 @@ impl Default for PlayerConfig {
             weapon_icon: true,
             tags: true,
             visible_only: false,
+            oof_arrows: true,
+            oof_offscreen_only: true,
+            oof_radius: 180.0,
+            oof_size: 14.0,
+            oof_color: Color32::from_rgb(255, 60, 60),
             sound: SoundConfig::default(),
         }
     }

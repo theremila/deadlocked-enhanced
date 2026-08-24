@@ -58,39 +58,42 @@ impl AppState {
         self.draw_sniper_crosshair(&painter, data);
         self.draw_keybind_list(&painter, data);
         self.draw_spectator_list(&painter, data);
+        self.draw_oof_arrows(&painter, data);
 
-        if data.aimbot_active {
-            let cat = &self.config.hud.overlay_text.status_text;
-            self.text_sized(
-                &painter,
-                "aimbot active",
-                hud::screen_anchor(
-                    [data.window_size.x, data.window_size.y],
-                    cat.position,
-                    8.0,
-                    8.0,
-                ),
-                cat.align.to_align2(),
-                cat.color,
-                cat.font_size,
-            );
-        }
+        if self.config.hud.status_indicators {
+            if data.aimbot_active {
+                let cat = &self.config.hud.overlay_text.status_text;
+                self.text_sized(
+                    &painter,
+                    "aimbot active",
+                    hud::screen_anchor(
+                        [data.window_size.x, data.window_size.y],
+                        cat.position,
+                        8.0,
+                        8.0,
+                    ),
+                    cat.align.to_align2(),
+                    cat.color,
+                    cat.font_size,
+                );
+            }
 
-        if data.triggerbot_active {
-            let cat = &self.config.hud.overlay_text.status_text;
-            self.text_sized(
-                &painter,
-                "trigger active",
-                hud::screen_anchor(
-                    [data.window_size.x, data.window_size.y],
-                    cat.position,
-                    8.0,
-                    8.0 + cat.font_size,
-                ),
-                cat.align.to_align2(),
-                cat.color,
-                cat.font_size,
-            );
+            if data.triggerbot_active {
+                let cat = &self.config.hud.overlay_text.status_text;
+                self.text_sized(
+                    &painter,
+                    "trigger active",
+                    hud::screen_anchor(
+                        [data.window_size.x, data.window_size.y],
+                        cat.position,
+                        8.0,
+                        8.0 + cat.font_size,
+                    ),
+                    cat.align.to_align2(),
+                    cat.color,
+                    cat.font_size,
+                );
+            }
         }
 
         self.grenade_manager(data, &painter);

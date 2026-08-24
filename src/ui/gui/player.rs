@@ -38,6 +38,10 @@ impl AppState {
                 if color_picker(ui, "Skeleton", &mut self.config.player.skeleton_color) {
                     self.send_config();
                 }
+
+                if color_picker(ui, "OOF Arrow Color", &mut self.config.player.oof_color) {
+                    self.send_config();
+                }
             });
         });
     }
@@ -95,6 +99,43 @@ impl AppState {
                 "Visible Only",
                 "Only show visible players",
                 &mut self.config.player.visible_only,
+            ) {
+                self.send_config();
+            }
+        });
+
+        ui.collapsing("Out Of Field Arrows", |ui| {
+            if checkbox(ui, "Enable OOF Arrows", &mut self.config.player.oof_arrows) {
+                self.send_config();
+            }
+
+            if checkbox_hover(
+                ui,
+                "Offscreen Only",
+                "Only show arrows for players outside the screen FOV",
+                &mut self.config.player.oof_offscreen_only,
+            ) {
+                self.send_config();
+            }
+
+            if drag(
+                ui,
+                "Radius",
+                DragValue::new(&mut self.config.player.oof_radius)
+                    .range(50.0..=500.0)
+                    .speed(1.0)
+                    .max_decimals(0),
+            ) {
+                self.send_config();
+            }
+
+            if drag(
+                ui,
+                "Size",
+                DragValue::new(&mut self.config.player.oof_size)
+                    .range(6.0..=30.0)
+                    .speed(0.5)
+                    .max_decimals(1),
             ) {
                 self.send_config();
             }

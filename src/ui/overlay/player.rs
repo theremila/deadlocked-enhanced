@@ -1,6 +1,6 @@
 use std::{collections::HashMap, time::{Duration, Instant}};
 
-use egui::{Color32, Painter, Pos2, Stroke, pos2};
+use egui::{Color32, Painter, Pos2, Shape, Stroke, pos2};
 use glam::vec3;
 
 use crate::{
@@ -13,6 +13,67 @@ use crate::{
 };
 
 impl AppState {
+    pub fn draw_oof_arrows(&self, painter: &Painter, data: &Data) {
+        if !self.config.player.oof_arrows || !data.esp_active || !data.in_game {
+            return;
+        }
+
+        let center = pos2(data.window_size.x / 2.0, data.window_size.y / 2.0);
+        let eye = if data.local_player.head.length() > 1.0 {
+            data.local_player.head
+        } else {
+            data.local_player.position + vec3(0.0, 0.0, 64.0)
+        };
+        let local_yaw = data.view_angles.y;
+
+        let empty: Vec<PlayerData> = Vec::new();
+        let friendlies = if self.config.player.show_friendlies {
+            &data.friendlies
+        } else {
+            &empty
+        };
+
+        for player in data.players.iter().chain(friendlies.iter()) {
+            if player.health <= 0 {
+                continue;
+            }
+
+            let on_screen = world_to_screen(&player.head, data).is_some()
+                || world_to_screen(&player.position, data).is_some();
+
+            if self.config.player.oof_offscreen_only && on_screen {
+                continue;
+            }
+
+            let delta = player.position - eye;
+            let enemy_yaw = delta.y.atan2(delta.x).to_degrees();
+            let diff_yaw = (local_yaw - enemy_yaw + 180.0).rem_euclid(360.0) - 180.0;
+            let rad = diff_yaw.to_radians();
+            let dir = egui::vec2(rad.sin(), -rad.cos());
+
+            let radius = self.config.player.oof_radius;
+            let size = self.config.player.oof_size;
+            let tip = center + dir * radius;
+            let side = egui::vec2(-dir.y, dir.x);
+            let base = tip - dir * size;
+            let left = base + side * (size * 0.55);
+            let right = base - side * (size * 0.55);
+
+            let color = if self.config.player.draw_box == DrawMode::Health {
+                self.health_color(player.health, 255)
+            } else {
+                self.config.player.oof_color
+            };
+
+            let shape = Shape::convex_polygon(
+                vec![tip, left, right],
+                color,
+                Stroke::new(1.0, Color32::from_black_alpha(200)),
+            );
+            painter.add(shape);
+        }
+    }
+
     pub fn draw_player(&self, painter: &Painter, player: &PlayerData, data: &Data) {
         if self.config.player.visible_only && !player.visible {
             return;
