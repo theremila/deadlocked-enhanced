@@ -111,9 +111,32 @@ impl AppState {
                 ui,
                 "Smooth",
                 DragValue::new(&mut self.weapon_config().aimbot.smooth)
-                    .range(0.0..=20.0)
-                    .speed(0.02)
+                    .range(1.0..=100.0)
+                    .speed(0.1)
                     .max_decimals(1),
+            ) {
+                self.send_config();
+            }
+
+            if drag(
+                ui,
+                "Randomize Smooth",
+                DragValue::new(&mut self.weapon_config().aimbot.smooth_random)
+                    .range(0.0..=20.0)
+                    .speed(0.05)
+                    .max_decimals(1),
+            ) {
+                self.send_config();
+            }
+
+            if drag(
+                ui,
+                "Deadzone",
+                DragValue::new(&mut self.weapon_config().aimbot.deadzone)
+                    .range(0.0..=2.0)
+                    .suffix("°")
+                    .speed(0.01)
+                    .max_decimals(2),
             ) {
                 self.send_config();
             }
@@ -144,6 +167,49 @@ impl AppState {
                 "targeting_mode",
                 "Targeting Mode",
                 &mut self.weapon_config().aimbot.targeting_mode,
+            ) {
+                self.send_config();
+            }
+        });
+
+        ui.collapsing("Humanization", |ui| {
+            if checkbox(
+                ui,
+                "Enable Humanization",
+                &mut self.weapon_config().aimbot.humanize,
+            ) {
+                self.send_config();
+            }
+
+            if drag(
+                ui,
+                "Curve / Bow",
+                DragValue::new(&mut self.weapon_config().aimbot.curve)
+                    .range(0.0..=1.0)
+                    .speed(0.005)
+                    .max_decimals(2),
+            ) {
+                self.send_config();
+            }
+
+            if drag(
+                ui,
+                "Tremor / Noise",
+                DragValue::new(&mut self.weapon_config().aimbot.tremor)
+                    .range(0.0..=1.0)
+                    .speed(0.005)
+                    .max_decimals(2),
+            ) {
+                self.send_config();
+            }
+
+            if drag(
+                ui,
+                "Overshoot",
+                DragValue::new(&mut self.weapon_config().aimbot.overshoot)
+                    .range(0.0..=1.0)
+                    .speed(0.005)
+                    .max_decimals(2),
             ) {
                 self.send_config();
             }

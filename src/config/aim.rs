@@ -41,9 +41,15 @@ pub struct AimbotConfig {
     pub flash_check: bool,
     pub fov: f32,
     pub smooth: f32,
+    pub smooth_random: f32,
+    pub deadzone: f32,
     pub inertia: f32,
     pub bones: Vec<Bones>,
     pub targeting_mode: TargetingMode,
+    pub humanize: bool,
+    pub curve: f32,
+    pub tremor: f32,
+    pub overshoot: f32,
 }
 
 impl Default for AimbotConfig {
@@ -58,7 +64,9 @@ impl Default for AimbotConfig {
             visibility_check: true,
             flash_check: true,
             fov: 2.5,
-            smooth: 5.0,
+            smooth: 15.0,
+            smooth_random: 2.0,
+            deadzone: 0.0,
             inertia: 1.0,
             bones: vec![
                 Bones::Head,
@@ -70,6 +78,10 @@ impl Default for AimbotConfig {
                 Bones::Hip,
             ],
             targeting_mode: TargetingMode::Fov,
+            humanize: true,
+            curve: 0.35,
+            tremor: 0.15,
+            overshoot: 0.1,
         }
     }
 }
