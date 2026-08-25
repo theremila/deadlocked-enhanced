@@ -1,7 +1,14 @@
 use egui::Color32;
 use serde::{Deserialize, Serialize};
+use strum::EnumIter;
 
 use crate::cs2::key_codes::KeyCode;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, EnumIter)]
+pub enum BunnyhopMode {
+    Legit,
+    Full,
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -14,6 +21,7 @@ pub struct UnsafeConfig {
     pub change_smoke_color: bool,
     pub smoke_color: Color32,
     pub bunnyhop: bool,
+    pub bunnyhop_mode: BunnyhopMode,
     pub bunnyhop_hotkey: KeyCode,
 }
 
@@ -28,6 +36,7 @@ impl Default for UnsafeConfig {
             change_smoke_color: false,
             smoke_color: Color32::RED,
             bunnyhop: false,
+            bunnyhop_mode: BunnyhopMode::Full,
             bunnyhop_hotkey: KeyCode::Space,
         }
     }

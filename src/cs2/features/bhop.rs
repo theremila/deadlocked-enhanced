@@ -1,5 +1,5 @@
 use crate::{
-    config::Config,
+    config::{Config, r#unsafe::BunnyhopMode},
     cs2::{CS2, entity::player::Player},
     os::mouse::Mouse,
 };
@@ -60,23 +60,45 @@ impl CS2 {
                 self.bhop.space_down = false;
             }
         } else {
-            if self.bhop.was_in_air {
-                // Just landed from air! Send burst of scroll ticks to hit sub-tick window
-                mouse.scroll_down_burst(2);
-                mouse.space_press();
-                self.bhop.space_down = true;
-                self.bhop.was_in_air = false;
-                self.bhop.ground_ticks = 0;
-            } else {
-                self.bhop.ground_ticks += 1;
-                if self.bhop.ground_ticks <= 3 {
-                    mouse.scroll_down();
-                } else if self.bhop.ground_ticks >= 8 {
-                    // Continuous ground reset
-                    mouse.space_release();
-                    mouse.scroll_down();
-                    mouse.space_press();
-                    self.bhop.ground_ticks = 0;
+            match config.misc.bunnyhop_mode {
+                BunnyhopMode::Full => {
+                    if self.bhop.was_in_air {
+                        // Frame-perfect sub-tick landing burst
+                        mouse.scroll_down_burst(4);
+                        mouse.space_press();
+                        self.bhop.space_down = true;
+                        self.bhop.was_in_air = false;
+                        self.bhop.ground_ticks = 0;
+                    } else {
+                        self.bhop.ground_ticks += 1;
+                        if self.bhop.ground_ticks <= 2 {
+                            mouse.scroll_down_burst(2);
+                        } else if self.bhop.ground_ticks >= 6 {
+                            mouse.space_release();
+                            mouse.scroll_down_burst(2);
+                            mouse.space_press();
+                            self.bhop.ground_ticks = 0;
+                        }
+                    }
+                }
+                BunnyhopMode::Legit => {
+                    if self.bhop.was_in_air {
+                        mouse.scroll_down_burst(2);
+                        mouse.space_press();
+                        self.bhop.space_down = true;
+                        self.bhop.was_in_air = false;
+                        self.bhop.ground_ticks = 0;
+                    } else {
+                        self.bhop.ground_ticks += 1;
+                        if self.bhop.ground_ticks <= 3 {
+                            mouse.scroll_down();
+                        } else if self.bhop.ground_ticks >= 8 {
+                            mouse.space_release();
+                            mouse.scroll_down();
+                            mouse.space_press();
+                            self.bhop.ground_ticks = 0;
+                        }
+                    }
                 }
             }
         }
