@@ -78,6 +78,15 @@ impl AppState {
         });
 
         ui.collapsing("Targeting", |ui| {
+            if combo_box(
+                ui,
+                "aimbot_fov_mode",
+                "FOV Mode",
+                &mut self.weapon_config().aimbot.fov_mode,
+            ) {
+                self.send_config();
+            }
+
             if checkbox(
                 ui,
                 "Target Friendlies",
@@ -86,22 +95,13 @@ impl AppState {
                 self.send_config();
             }
 
-            if checkbox_hover(
-                ui,
-                "Distance-Adjusted FOV",
-                "Adjusts FOV based on target distance",
-                &mut self.weapon_config().aimbot.distance_adjusted_fov,
-            ) {
-                self.send_config();
-            }
-
             if drag(
                 ui,
                 "FOV",
                 DragValue::new(&mut self.weapon_config().aimbot.fov)
-                    .range(0.1..=360.0)
-                    .suffix("°")
-                    .speed(0.02)
+                    .range(1.0..=300.0)
+                    .suffix(" u")
+                    .speed(0.5)
                     .max_decimals(1),
             ) {
                 self.send_config();
@@ -133,10 +133,21 @@ impl AppState {
                 ui,
                 "Deadzone",
                 DragValue::new(&mut self.weapon_config().aimbot.deadzone)
-                    .range(0.0..=2.0)
-                    .suffix("°")
-                    .speed(0.01)
-                    .max_decimals(2),
+                    .range(0.0..=50.0)
+                    .suffix(" u")
+                    .speed(0.1)
+                    .max_decimals(1),
+            ) {
+                self.send_config();
+            }
+
+            if drag(
+                ui,
+                "Reaction Time",
+                DragValue::new(&mut self.weapon_config().aimbot.reaction_time)
+                    .range(0..=500)
+                    .suffix(" ms")
+                    .speed(1.0),
             ) {
                 self.send_config();
             }
@@ -226,8 +237,32 @@ impl AppState {
 
             if checkbox(
                 ui,
+                "Through Walls",
+                &mut self.weapon_config().aimbot.through_walls,
+            ) {
+                self.send_config();
+            }
+
+            if checkbox(
+                ui,
+                "Smoke Check",
+                &mut self.weapon_config().aimbot.smoke_check,
+            ) {
+                self.send_config();
+            }
+
+            if checkbox(
+                ui,
                 "Flash Check",
                 &mut self.weapon_config().aimbot.flash_check,
+            ) {
+                self.send_config();
+            }
+
+            if checkbox(
+                ui,
+                "In-Air Check",
+                &mut self.weapon_config().aimbot.in_air_check,
             ) {
                 self.send_config();
             }
@@ -311,6 +346,59 @@ impl AppState {
                 self.send_config();
             }
 
+            if checkbox(
+                ui,
+                "Prefer Center",
+                &mut self.weapon_config().triggerbot.prefer_center,
+            ) {
+                self.send_config();
+            }
+
+            if self.weapon_config().triggerbot.prefer_center
+                && drag(
+                    ui,
+                    "Center Tolerance",
+                    DragValue::new(&mut self.weapon_config().triggerbot.center_tolerance)
+                        .range(1.0..=100.0)
+                        .suffix("%")
+                        .speed(0.5)
+                        .max_decimals(1),
+                )
+            {
+                self.send_config();
+            }
+
+            if drag(
+                ui,
+                "Hitchance",
+                DragValue::new(&mut self.weapon_config().triggerbot.hitchance)
+                    .range(0.0..=100.0)
+                    .suffix("%")
+                    .speed(0.5)
+                    .max_decimals(1),
+            ) {
+                self.send_config();
+            }
+
+            if drag(
+                ui,
+                "Min Damage",
+                DragValue::new(&mut self.weapon_config().triggerbot.min_damage)
+                    .range(1..=100)
+                    .speed(1.0),
+            ) {
+                self.send_config();
+            }
+
+            if checkbox_hover(
+                ui,
+                "Auto Stop",
+                "Automatically counter-strafes / waits for stop to maximize hitchance",
+                &mut self.weapon_config().triggerbot.autostop,
+            ) {
+                self.send_config();
+            }
+
             if drag(
                 ui,
                 "Hold Duration (ms)",
@@ -325,6 +413,30 @@ impl AppState {
         ui.collapsing("Checks\u{200b}", |ui| {
             if checkbox(
                 ui,
+                "Visibility Check",
+                &mut self.weapon_config().triggerbot.visibility_check,
+            ) {
+                self.send_config();
+            }
+
+            if checkbox(
+                ui,
+                "Through Walls",
+                &mut self.weapon_config().triggerbot.through_walls,
+            ) {
+                self.send_config();
+            }
+
+            if checkbox(
+                ui,
+                "Smoke Check",
+                &mut self.weapon_config().triggerbot.smoke_check,
+            ) {
+                self.send_config();
+            }
+
+            if checkbox(
+                ui,
                 "Flash Check",
                 &mut self.weapon_config().triggerbot.flash_check,
             ) {
@@ -335,6 +447,14 @@ impl AppState {
                 ui,
                 "Scope Check",
                 &mut self.weapon_config().triggerbot.scope_check,
+            ) {
+                self.send_config();
+            }
+
+            if checkbox(
+                ui,
+                "In-Air Check",
+                &mut self.weapon_config().triggerbot.in_air_check,
             ) {
                 self.send_config();
             }
@@ -355,6 +475,26 @@ impl AppState {
                     .range(0..=5000),
             ) {
                 self.send_config();
+            }
+        });
+
+        ui.collapsing("Bones\u{200b}", |ui| {
+            for bone in Bones::iter() {
+                let text = format!("{:?}", bone);
+                let index = self
+                    .weapon_config()
+                    .triggerbot
+                    .bones
+                    .iter()
+                    .position(|b| *b == bone);
+                if ui.selectable_label(index.is_some(), text).clicked() {
+                    if let Some(index) = index {
+                        self.weapon_config().triggerbot.bones.remove(index);
+                    } else {
+                        self.weapon_config().triggerbot.bones.push(bone);
+                    }
+                    self.send_config();
+                }
             }
         });
 

@@ -219,6 +219,95 @@ impl Weapon {
             Weapon::C4 => "\u{e01e}",
         }
     }
+
+    pub fn base_damage(&self) -> f32 {
+        use Weapon::*;
+        match self {
+            Awp => 115.0,
+            Ssg08 => 88.0,
+            G3SG1 | Scar20 => 80.0,
+            Ak47 => 36.0,
+            M4A4 => 33.0,
+            M4A1 => 38.0,
+            Aug => 28.0,
+            Sg556 => 30.0,
+            Galilar => 30.0,
+            Famas => 30.0,
+            Deagle => 53.0,
+            Revolver => 86.0,
+            Usp | P2000 => 35.0,
+            Glock => 30.0,
+            P250 => 38.0,
+            FiveSeven | Tec9 | Cz75A => 32.0,
+            DualBerettas => 38.0,
+            Mp9 | Mac10 => 26.0,
+            Mp7 | Mp5Sd => 29.0,
+            Ump45 => 35.0,
+            P90 => 26.0,
+            Bizon => 27.0,
+            Negev => 35.0,
+            M249 => 32.0,
+            Mag7 | Nova | Sawedoff | Xm1014 => 180.0,
+            Taser => 1000.0,
+            _ => 30.0,
+        }
+    }
+
+    pub fn armor_ratio(&self) -> f32 {
+        use Weapon::*;
+        match self {
+            Awp => 1.95,
+            Ssg08 => 1.70,
+            G3SG1 | Scar20 => 1.65,
+            Ak47 => 1.55,
+            M4A4 | M4A1 => 1.40,
+            Aug | Sg556 => 1.80,
+            Galilar | Famas => 1.40,
+            Deagle | Revolver => 1.70,
+            FiveSeven | Tec9 | Cz75A => 1.55,
+            P250 => 1.28,
+            Usp | P2000 => 1.01,
+            Glock => 0.94,
+            DualBerettas => 1.15,
+            Negev | M249 => 1.42,
+            Ump45 => 1.30,
+            P90 => 1.38,
+            _ => 1.0,
+        }
+    }
+
+    pub fn penetration_power(&self) -> f32 {
+        use Weapon::*;
+        match self {
+            Awp | Ssg08 | G3SG1 | Scar20 => 2.5,
+            Ak47 | M4A4 | M4A1 | Aug | Sg556 | Galilar | Famas | Deagle | Revolver | Negev | M249 => 2.0,
+            _ => 1.0,
+        }
+    }
+
+    pub fn headshot_multiplier(&self) -> f32 {
+        if *self == Weapon::Taser {
+            1.0
+        } else {
+            4.0
+        }
+    }
+
+    pub fn base_inaccuracy(&self, is_scoped: bool) -> f32 {
+        use Weapon::*;
+        match self {
+            Awp => if is_scoped { 0.0015 } else { 0.08 },
+            Ssg08 => if is_scoped { 0.002 } else { 0.04 },
+            G3SG1 | Scar20 => if is_scoped { 0.002 } else { 0.06 },
+            Deagle | Revolver => 0.006,
+            Ak47 | M4A4 | M4A1 | Aug | Sg556 => 0.0045,
+            Usp | P2000 | P250 | FiveSeven | Glock => 0.007,
+            Mp9 | Mac10 | Mp7 | Mp5Sd | Ump45 | P90 | Bizon => 0.010,
+            Negev | M249 => 0.012,
+            Mag7 | Nova | Sawedoff | Xm1014 => 0.030,
+            _ => 0.008,
+        }
+    }
 }
 
 impl std::fmt::Display for Weapon {

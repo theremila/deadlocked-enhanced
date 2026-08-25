@@ -119,7 +119,7 @@ impl CS2 {
 
         self.esp_toggle(config);
 
-        self.triggerbot(config);
+        self.triggerbot(config, mouse);
 
         self.triggerbot_shoot(mouse);
 
@@ -358,6 +358,81 @@ impl CS2 {
         self.process.read::<u8>(self.offsets.convar.ffa + 0x58) == 1
     }
 
+    pub fn is_line_in_smoke(&self, start: Vec3, end: Vec3) -> bool {
+        let dir = end - start;
+        let len = dir.length();
+        if len < 0.001 {
+            return false;
+        }
+        let norm_dir = dir / len;
+
+        for entity in &self.entities {
+            if let entity::Entity::Smoke(smoke) = entity {
+                let smoke_pos = smoke.info(self).position;
+                let t = (smoke_pos - start).dot(norm_dir).clamp(0.0, len);
+                let closest = start + norm_dir * t;
+                if (smoke_pos - closest).length() <= 145.0 {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    pub fn calculate_damage(
+        &self,
+        start: Vec3,
+        end: Vec3,
+        target_bone: Bones,
+        has_armor: bool,
+    ) -> f32 {
+        let base_damage = self.weapon.base_damage();
+        let headshot_mult = self.weapon.headshot_multiplier();
+        let armor_ratio = self.weapon.armor_ratio();
+        let pen_power = self.weapon.penetration_power();
+
+        // 1. Hitgroup damage scaling
+        let hitgroup_damage = match target_bone {
+            Bones::Head => base_damage * headshot_mult,
+            Bones::Spine1 | Bones::Spine2 | Bones::Spine3 | Bones::Hip => base_damage * 1.25,
+            Bones::LeftFoot | Bones::RightFoot | Bones::LeftHand | Bones::RightHand => {
+                base_damage * 0.75
+            }
+            _ => base_damage,
+        };
+
+        // 2. Armor reduction
+        let scaled_damage = if has_armor && target_bone != Bones::LeftFoot && target_bone != Bones::RightFoot {
+            hitgroup_damage * (armor_ratio * 0.5)
+        } else {
+            hitgroup_damage
+        };
+
+        // 3. Line of sight / Wall penetration scaling
+        if let Some(bvh) = &self.bvh {
+            if bvh.has_line_of_sight(start, end) {
+                scaled_damage
+            } else {
+                let pen_factor = (pen_power / 2.5).clamp(0.2, 1.0) * 0.65;
+                scaled_damage * pen_factor
+            }
+        } else {
+            scaled_damage
+        }
+    }
+
+    pub fn can_penetrate_wall(
+        &self,
+        start: Vec3,
+        end: Vec3,
+        target_bone: Bones,
+        has_armor: bool,
+        min_damage: i32,
+    ) -> bool {
+        let damage = self.calculate_damage(start, end, target_bone, has_armor);
+        damage >= min_damage as f32
+    }
+
     fn current_time(&self) -> f32 {
         let global_vars: usize = self.process.read(self.offsets.direct.global_vars);
         self.process.read(global_vars + 0x30)
@@ -369,6 +444,7 @@ impl CS2 {
             .read_string(self.process.read(global_vars + 0x198))
     }
 
+    #[allow(dead_code)]
     fn distance_scale(&self, distance: f32) -> f32 {
         if distance > 500.0 {
             1.0

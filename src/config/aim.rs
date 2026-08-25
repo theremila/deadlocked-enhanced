@@ -36,13 +36,18 @@ pub struct AimbotConfig {
     pub mode: KeyMode,
     pub target_friendlies: bool,
     pub distance_adjusted_fov: bool,
+    pub fov_mode: FovMode,
     pub start_bullet: i32,
     pub visibility_check: bool,
+    pub through_walls: bool,
+    pub smoke_check: bool,
     pub flash_check: bool,
+    pub in_air_check: bool,
     pub fov: f32,
     pub smooth: f32,
     pub smooth_random: f32,
     pub deadzone: f32,
+    pub reaction_time: u64,
     pub inertia: f32,
     pub bones: Vec<Bones>,
     pub targeting_mode: TargetingMode,
@@ -60,13 +65,18 @@ impl Default for AimbotConfig {
             mode: KeyMode::Hold,
             target_friendlies: false,
             distance_adjusted_fov: true,
+            fov_mode: FovMode::TargetBone,
             start_bullet: 0,
             visibility_check: true,
+            through_walls: false,
+            smoke_check: true,
             flash_check: true,
-            fov: 2.5,
+            in_air_check: false,
+            fov: 25.0,
             smooth: 15.0,
             smooth_random: 2.0,
             deadzone: 0.0,
+            reaction_time: 0,
             inertia: 1.0,
             bones: vec![
                 Bones::Head,
@@ -110,6 +120,12 @@ pub enum KeyMode {
     Toggle,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, EnumIter)]
+pub enum FovMode {
+    Crosshair,
+    TargetBone,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, EnumIter)]
 pub enum TargetingMode {
     Fov,
@@ -124,11 +140,21 @@ pub struct TriggerbotConfig {
     pub delay: RangeInclusive<u64>,
     pub shot_duration: u64,
     pub mode: KeyMode,
+    pub hitchance: f32,
+    pub min_damage: i32,
+    pub autostop: bool,
+    pub visibility_check: bool,
+    pub through_walls: bool,
+    pub smoke_check: bool,
     pub flash_check: bool,
     pub scope_check: bool,
+    pub in_air_check: bool,
     pub velocity_check: bool,
     pub velocity_threshold: f32,
     pub head_only: bool,
+    pub prefer_center: bool,
+    pub center_tolerance: f32,
+    pub bones: Vec<Bones>,
 }
 
 impl Default for TriggerbotConfig {
@@ -139,11 +165,29 @@ impl Default for TriggerbotConfig {
             delay: 100..=200,
             shot_duration: 200,
             mode: KeyMode::Hold,
+            hitchance: 50.0,
+            min_damage: 20,
+            autostop: false,
+            visibility_check: true,
+            through_walls: false,
+            smoke_check: true,
             flash_check: true,
             scope_check: true,
+            in_air_check: false,
             velocity_check: true,
             velocity_threshold: 100.0,
             head_only: false,
+            prefer_center: false,
+            center_tolerance: 50.0,
+            bones: vec![
+                Bones::Head,
+                Bones::Neck,
+                Bones::Spine4,
+                Bones::Spine3,
+                Bones::Spine2,
+                Bones::Spine1,
+                Bones::Hip,
+            ],
         }
     }
 }

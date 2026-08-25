@@ -92,6 +92,10 @@ const AXIS_Y: u16 = 0x01;
 const AXIS_WHEEL: u16 = 0x08;
 const BTN_LEFT: u16 = 0x110;
 const KEY_SPACE: u16 = 57;
+const KEY_W: u16 = 17;
+const KEY_A: u16 = 30;
+const KEY_S: u16 = 31;
+const KEY_D: u16 = 32;
 
 pub struct Mouse {
     file: File,
@@ -122,6 +126,10 @@ impl Mouse {
 
             ui_set_keybit(fd, BTN_LEFT as u64).map_err(|e| e.to_string())?;
             ui_set_keybit(fd, KEY_SPACE as u64).map_err(|e| e.to_string())?;
+            ui_set_keybit(fd, KEY_W as u64).map_err(|e| e.to_string())?;
+            ui_set_keybit(fd, KEY_A as u64).map_err(|e| e.to_string())?;
+            ui_set_keybit(fd, KEY_S as u64).map_err(|e| e.to_string())?;
+            ui_set_keybit(fd, KEY_D as u64).map_err(|e| e.to_string())?;
 
             ui_dev_setup(fd, &DEVICE_SETUP).map_err(|e| e.to_string())?;
             ui_dev_create(fd).map_err(|e| e.to_string())?;
@@ -223,6 +231,24 @@ impl Mouse {
 
     pub fn space_release(&mut self) {
         self.key(KEY_SPACE, 0);
+    }
+
+    pub fn counter_strafe(&mut self, forward_vel: f32, side_vel: f32) {
+        if forward_vel > 20.0 {
+            self.key(KEY_S, 1);
+            self.key(KEY_S, 0);
+        } else if forward_vel < -20.0 {
+            self.key(KEY_W, 1);
+            self.key(KEY_W, 0);
+        }
+
+        if side_vel > 20.0 {
+            self.key(KEY_D, 1);
+            self.key(KEY_D, 0);
+        } else if side_vel < -20.0 {
+            self.key(KEY_A, 1);
+            self.key(KEY_A, 0);
+        }
     }
 
     fn key(&mut self, code: u16, pressed: i32) {
