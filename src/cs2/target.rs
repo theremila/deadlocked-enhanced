@@ -1,12 +1,10 @@
 use glam::Vec2;
-use strum::IntoEnumIterator;
 
 use crate::{
     config::{Config, aim::TargetingMode},
     constants::cs2,
     cs2::{
         CS2,
-        bones::Bones,
         entity::{player::Player, weapon_class::WeaponClass},
     },
     math::angles_to_fov,
@@ -56,10 +54,9 @@ impl CS2 {
 
         let aimbot_config = self.aimbot_config(config);
         let targeting_mode = &aimbot_config.targeting_mode;
-        let max_fov = aimbot_config.fov;
+        let max_fov_units = aimbot_config.fov;
 
-        let mut best_fov = 360.0;
-        let mut best_distance = f32::MAX;
+        let mut best_metric = f32::MAX;
         let eye_position = local_player.eye_position(self);
 
         if self.target.player.is_none() {
@@ -78,65 +75,65 @@ impl CS2 {
 
         let target_friendlies = aimbot_config.target_friendlies;
 
+        // Check if existing target is still valid and within FOV
+        if let Some(player) = &self.target.player {
+            if player.is_valid(self) && (ffa || target_friendlies || team != player.team(self)) {
+                let target_bone = if aimbot_config.bones.iter().any(|b| b.u64() == self.target.bone_index) {
+                    self.target.bone_index
+                } else {
+                    aimbot_config.bones.first().map(|b| b.u64()).unwrap_or(7)
+                };
+
+                let bone_position = player.bone_position(self, target_bone);
+                let distance = eye_position.distance(bone_position);
+                let angle = self.angle_to_target(&local_player, &bone_position, &aim_punch);
+                let fov_deg = angles_to_fov(&view_angles, &angle);
+                let offset_units = distance * fov_deg.to_radians().sin();
+
+                if offset_units <= max_fov_units {
+                    self.target.angle = angle;
+                    self.target.distance = distance;
+                    self.target.bone_index = target_bone;
+                    return;
+                }
+            }
+            self.target.reset();
+        }
+
         for player in &self.players {
             if !(ffa || target_friendlies) && team == player.team(self) {
                 continue;
             }
 
-            let head_position = player.bone_position(self, Bones::Head.u64());
-            let distance = eye_position.distance(head_position);
-            let angle = self.angle_to_target(&local_player, &head_position, &aim_punch);
-            let fov = angles_to_fov(&view_angles, &angle);
+            for bone in &aimbot_config.bones {
+                let bone_position = player.bone_position(self, bone.u64());
+                let distance = eye_position.distance(bone_position);
+                if distance < 1.0 {
+                    continue;
+                }
 
-            let fov_limit = max_fov * self.distance_scale(distance);
-            if fov > fov_limit {
-                continue;
-            }
+                let angle = self.angle_to_target(&local_player, &bone_position, &aim_punch);
+                let fov_deg = angles_to_fov(&view_angles, &angle);
+                let offset_units = distance * fov_deg.to_radians().sin();
 
-            let should_select = match targeting_mode {
-                TargetingMode::Fov => fov < best_fov,
-                TargetingMode::Distance => distance < best_distance,
-            };
+                if offset_units > max_fov_units {
+                    continue;
+                }
 
-            if should_select {
-                best_fov = fov;
-                best_distance = distance;
+                let metric = match targeting_mode {
+                    TargetingMode::Fov => offset_units,
+                    TargetingMode::Distance => distance,
+                };
 
-                self.target.player = Some(*player);
-                self.target.angle = angle;
-                self.target.distance = distance;
-                self.target.bone_index = Bones::Head.u64();
-            }
-        }
+                if metric < best_metric {
+                    best_metric = metric;
 
-        let Some(target) = &self.target.player else {
-            return;
-        };
-
-        // update target angle
-        let mut smallest_fov = 360.0;
-        for bone in Bones::iter() {
-            let bone_position = target.bone_position(self, bone.u64());
-            let distance = eye_position.distance(bone_position);
-            let angle = self.angle_to_target(&local_player, &bone_position, &aim_punch);
-            let fov = angles_to_fov(&view_angles, &angle);
-
-            if fov < smallest_fov {
-                smallest_fov = fov;
-
-                self.target.angle = angle;
-                self.target.distance = distance;
-                self.target.bone_index = bone.u64();
+                    self.target.player = Some(*player);
+                    self.target.angle = angle;
+                    self.target.distance = distance;
+                    self.target.bone_index = bone.u64();
+                }
             }
         }
-        /*
-        let head_position = self.get_bone_position(process, self.target.pawn, Bones::Head.u64());
-        let distance = eye_position.distance(head_position);
-        let angle = self.get_target_angle(process, local_pawn, head_position, aim_punch);
-
-        self.target.angle = angle;
-        self.target.distance = distance;
-        self.target.bone_index = Bones::Head.u64();
-        */
     }
 }
