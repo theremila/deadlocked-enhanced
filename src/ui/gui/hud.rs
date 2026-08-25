@@ -97,6 +97,10 @@ impl AppState {
 
     fn hud_left(&mut self, ui: &mut Ui) {
         collapsing_open(ui, "HUD", |ui| {
+            if checkbox(ui, "Watermark", &mut self.config.hud.watermark) {
+                self.send_config();
+            }
+
             ui.horizontal(|ui| {
                 if checkbox(ui, "Bomb Timer", &mut self.config.hud.bomb_timer) {
                     self.send_config();

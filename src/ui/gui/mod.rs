@@ -81,14 +81,7 @@ impl AppState {
                         },
                     ));
 
-                    let frame_avg = if self.frame_times.is_empty() {
-                        0.0f32
-                    } else {
-                        let frame_sum =
-                            self.frame_times.iter().sum::<Duration>().as_secs_f32() * 1000.0;
-                        frame_sum / self.frame_times.len() as f32
-                    };
-                    ui.label(format!("{frame_avg:.1} ms"));
+                    ui.label(format!("{:.1} ms", self.frame_avg_ms()));
                 });
             });
 

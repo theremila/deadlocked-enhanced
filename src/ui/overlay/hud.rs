@@ -1,4 +1,4 @@
-use egui::{Color32, Painter, Pos2, Stroke, pos2, vec2};
+use egui::{Align2, Color32, Painter, Pos2, Stroke, pos2, vec2};
 use glam::Vec3;
 
 use crate::{
@@ -299,6 +299,39 @@ impl AppState {
                 pos2(center.x, center.y - gap - length),
             ],
             stroke,
+        );
+    }
+
+    pub fn draw_watermark(&self, painter: &Painter, data: &Data) {
+        if !self.config.hud.watermark {
+            return;
+        }
+
+        const FONT_SIZE: f32 = 13.0;
+        const PADDING: egui::Vec2 = egui::vec2(10.0, 5.0);
+        const SCREEN_MARGIN: f32 = 12.0;
+        const CORNER_RADIUS: f32 = 4.0;
+        const BG_COLOR: Color32 = Color32::from_rgba_unmultiplied(0, 0, 0, 180);
+
+        let text = format!("deadlocked.enhanced / {} fps", self.fps());
+        let font = egui::FontId::proportional(FONT_SIZE);
+        let galley = painter.layout_no_wrap(text.clone(), font, Color32::WHITE);
+
+        let size = galley.size() + PADDING * 2.0;
+        let min_pos = pos2(
+            (data.window_size.x - size.x - SCREEN_MARGIN).round(),
+            SCREEN_MARGIN,
+        );
+        let rect = egui::Rect::from_min_size(min_pos, size);
+
+        painter.rect_filled(rect, CORNER_RADIUS, BG_COLOR);
+        self.text_sized(
+            painter,
+            text,
+            rect.center(),
+            Align2::CENTER_CENTER,
+            Color32::WHITE,
+            FONT_SIZE,
         );
     }
 }

@@ -59,6 +59,7 @@ impl AppState {
         self.draw_keybind_list(&painter, data);
         self.draw_spectator_list(&painter, data);
         self.draw_oof_arrows(&painter, data);
+        self.draw_watermark(&painter, data);
 
         if self.config.hud.status_indicators {
             if data.aimbot_active {

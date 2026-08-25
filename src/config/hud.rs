@@ -6,6 +6,7 @@ use super::text::OverlayTextConfig;
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HudConfig {
+    pub watermark: bool,
     pub bomb_timer: bool,
     pub fov_circle: bool,
     pub sniper_crosshair: CrosshairConfig,
@@ -23,6 +24,7 @@ pub struct HudConfig {
 impl Default for HudConfig {
     fn default() -> Self {
         Self {
+            watermark: true,
             bomb_timer: true,
             fov_circle: false,
             sniper_crosshair: CrosshairConfig::default(),

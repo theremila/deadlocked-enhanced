@@ -118,6 +118,25 @@ impl AppState {
             overlay_egui: None,
         }
     }
+
+    #[inline]
+    pub fn frame_avg_ms(&self) -> f32 {
+        if self.frame_times.is_empty() {
+            return 0.0;
+        }
+        let total_secs: f32 = self.frame_times.iter().map(|d| d.as_secs_f32()).sum();
+        (total_secs / self.frame_times.len() as f32) * 1000.0
+    }
+
+    #[inline]
+    pub fn fps(&self) -> u32 {
+        let frame_ms = self.frame_avg_ms();
+        if frame_ms > 0.0 {
+            (1000.0 / frame_ms).round() as u32
+        } else {
+            0
+        }
+    }
 }
 
 impl App {
