@@ -1,4 +1,7 @@
-use std::{collections::HashMap, time::{Duration, Instant}};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use egui::{Color32, Painter, Pos2, Shape, Stroke, pos2};
 use glam::vec3;
@@ -14,7 +17,8 @@ use crate::{
 
 impl AppState {
     pub fn draw_oof_arrows(&self, painter: &Painter, data: &Data) {
-        if !self.config.player.oof_arrows || !data.esp_active || !data.in_game {
+        let config = &self.config.player;
+        if !config.oof_arrows || !data.esp_active || !data.in_game {
             return;
         }
 
@@ -25,23 +29,26 @@ impl AppState {
             data.local_player.position + vec3(0.0, 0.0, 64.0)
         };
         let local_yaw = data.view_angles.y;
+        let radius = config.oof_radius;
+        let size = config.oof_size;
+        let health_colored = config.draw_box == DrawMode::Health;
+        let arrow_color = config.oof_color;
+        let stroke = Stroke::new(1.0, Color32::from_black_alpha(200));
 
-        let empty: Vec<PlayerData> = Vec::new();
-        let friendlies = if self.config.player.show_friendlies {
-            &data.friendlies
-        } else {
-            &empty
-        };
-
-        for player in data.players.iter().chain(friendlies.iter()) {
+        let friendlies_enabled = config.show_friendlies;
+        let players = data
+            .players
+            .iter()
+            .chain(data.friendlies.iter().filter(|_| friendlies_enabled));
+        for player in players {
             if player.health <= 0 {
                 continue;
             }
 
-            let on_screen = world_to_screen(&player.head, data).is_some()
-                || world_to_screen(&player.position, data).is_some();
-
-            if self.config.player.oof_offscreen_only && on_screen {
+            if config.oof_offscreen_only
+                && (world_to_screen(&player.head, data).is_some()
+                    || world_to_screen(&player.position, data).is_some())
+            {
                 continue;
             }
 
@@ -51,25 +58,19 @@ impl AppState {
             let rad = diff_yaw.to_radians();
             let dir = egui::vec2(rad.sin(), -rad.cos());
 
-            let radius = self.config.player.oof_radius;
-            let size = self.config.player.oof_size;
             let tip = center + dir * radius;
             let side = egui::vec2(-dir.y, dir.x);
             let base = tip - dir * size;
             let left = base + side * (size * 0.55);
             let right = base - side * (size * 0.55);
 
-            let color = if self.config.player.draw_box == DrawMode::Health {
+            let color = if health_colored {
                 self.health_color(player.health, 255)
             } else {
-                self.config.player.oof_color
+                arrow_color
             };
 
-            let shape = Shape::convex_polygon(
-                vec![tip, left, right],
-                color,
-                Stroke::new(1.0, Color32::from_black_alpha(200)),
-            );
+            let shape = Shape::convex_polygon(vec![tip, left, right], color, stroke);
             painter.add(shape);
         }
     }
