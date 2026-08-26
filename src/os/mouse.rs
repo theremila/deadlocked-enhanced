@@ -25,15 +25,13 @@ struct InputEvent {
 }
 
 impl InputEvent {
-    fn bytes(&self) -> Vec<u8> {
-        let mut bytes: Vec<u8> = Vec::with_capacity(24);
-
-        bytes.extend(&self.time.seconds.to_le_bytes());
-        bytes.extend(&self.time.microseconds.to_le_bytes());
-
-        bytes.extend(&self.event_type.to_le_bytes());
-        bytes.extend(&self.code.to_le_bytes());
-        bytes.extend(&self.value.to_le_bytes());
+    fn bytes(&self) -> [u8; 24] {
+        let mut bytes = [0; 24];
+        bytes[0..8].copy_from_slice(&self.time.seconds.to_le_bytes());
+        bytes[8..16].copy_from_slice(&self.time.microseconds.to_le_bytes());
+        bytes[16..18].copy_from_slice(&self.event_type.to_le_bytes());
+        bytes[18..20].copy_from_slice(&self.code.to_le_bytes());
+        bytes[20..24].copy_from_slice(&self.value.to_le_bytes());
 
         bytes
     }
@@ -142,6 +140,12 @@ impl Mouse {
     }
 
     pub fn move_rel(&mut self, coords: Vec2) {
+        for axis in 0..2 {
+            if coords[axis] != 0.0 && coords[axis].signum() != self.fractional[axis].signum() {
+                self.fractional[axis] = 0.0;
+            }
+        }
+
         let total = coords + self.fractional;
         let int_x = total.x.trunc() as i32;
         let int_y = total.y.trunc() as i32;
@@ -179,14 +183,20 @@ impl Mouse {
             value: 0,
         };
 
-        self.file.write_all(&x.bytes()).unwrap();
-        self.file.write_all(&syn.bytes()).unwrap();
-
-        self.file.write_all(&y.bytes()).unwrap();
+        if int_x != 0 {
+            self.file.write_all(&x.bytes()).unwrap();
+        }
+        if int_y != 0 {
+            self.file.write_all(&y.bytes()).unwrap();
+        }
         self.file.write_all(&syn.bytes()).unwrap();
     }
 
-    pub fn scroll_down(&mut self) {
+    pub fn scroll_down_burst(&mut self, count: usize) {
+        if count == 0 {
+            return;
+        }
+
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         let time = Timeval {
             seconds: now.as_secs(),
@@ -197,7 +207,7 @@ impl Mouse {
             time,
             event_type: EV_REL,
             code: AXIS_WHEEL,
-            value: -1,
+            value: -(count.min(i32::MAX as usize) as i32),
         };
 
         let syn = InputEvent {
@@ -209,12 +219,6 @@ impl Mouse {
 
         let _ = self.file.write_all(&wheel.bytes());
         let _ = self.file.write_all(&syn.bytes());
-    }
-
-    pub fn scroll_down_burst(&mut self, count: usize) {
-        for _ in 0..count {
-            self.scroll_down();
-        }
     }
 
     pub fn left_press(&mut self) {
