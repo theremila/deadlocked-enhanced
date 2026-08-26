@@ -3,7 +3,7 @@ use egui::{DragValue, Ui};
 use crate::ui::{
     app::AppState,
     gui::helpers::{
-        checkbox, checkbox_hover, collapsing_open, color_picker, combo_box, drag, keybind, scroll,
+        checkbox, checkbox_hover, color_picker, combo_box, drag, groupbox, keybind, scroll,
         text_settings_button,
     },
 };
@@ -17,38 +17,12 @@ impl AppState {
                 let right = &mut cols[1];
                 self.player_right(right);
             });
-
-            collapsing_open(ui, "Colors", |ui| {
-                if color_picker(
-                    ui,
-                    "Box (visible)",
-                    &mut self.config.player.box_visible_color,
-                ) {
-                    self.send_config();
-                }
-
-                if color_picker(
-                    ui,
-                    "Box (invisible)",
-                    &mut self.config.player.box_invisible_color,
-                ) {
-                    self.send_config();
-                }
-
-                if color_picker(ui, "Skeleton", &mut self.config.player.skeleton_color) {
-                    self.send_config();
-                }
-
-                if color_picker(ui, "OOF Arrow Color", &mut self.config.player.oof_color) {
-                    self.send_config();
-                }
-            });
         });
     }
 
     fn player_left(&mut self, ui: &mut Ui) {
-        collapsing_open(ui, "Players", |ui| {
-            if checkbox(ui, "Player", &mut self.config.player.enabled) {
+        groupbox(ui, "Player ESP", |ui| {
+            if checkbox(ui, "Enable Player ESP", &mut self.config.player.enabled) {
                 self.send_config();
             }
 
@@ -73,7 +47,7 @@ impl AppState {
                 self.send_config();
             }
 
-            if combo_box(ui, "draw_box", "Box", &mut self.config.player.draw_box) {
+            if combo_box(ui, "draw_box", "Bounding Box", &mut self.config.player.draw_box) {
                 self.send_config();
             }
 
@@ -104,7 +78,7 @@ impl AppState {
             }
         });
 
-        ui.collapsing("Out Of Field Arrows", |ui| {
+        groupbox(ui, "Out Of Field (OOF) Arrows", |ui| {
             if checkbox(ui, "Enable OOF Arrows", &mut self.config.player.oof_arrows) {
                 self.send_config();
             }
@@ -143,7 +117,7 @@ impl AppState {
     }
 
     fn player_right(&mut self, ui: &mut Ui) {
-        collapsing_open(ui, "Info", |ui| {
+        groupbox(ui, "Player Info Overlay", |ui| {
             if ui
                 .checkbox(&mut self.config.player.health_bar, "Health Bar")
                 .changed()
@@ -194,7 +168,33 @@ impl AppState {
             });
         });
 
-        ui.collapsing("Sound ESP", |ui| {
+        groupbox(ui, "ESP Colors", |ui| {
+            if color_picker(
+                ui,
+                "Box (visible)",
+                &mut self.config.player.box_visible_color,
+            ) {
+                self.send_config();
+            }
+
+            if color_picker(
+                ui,
+                "Box (invisible)",
+                &mut self.config.player.box_invisible_color,
+            ) {
+                self.send_config();
+            }
+
+            if color_picker(ui, "Skeleton", &mut self.config.player.skeleton_color) {
+                self.send_config();
+            }
+
+            if color_picker(ui, "OOF Arrow Color", &mut self.config.player.oof_color) {
+                self.send_config();
+            }
+        });
+
+        groupbox(ui, "Sound ESP", |ui| {
             if checkbox_hover(
                 ui,
                 "Enabled",
@@ -222,63 +222,63 @@ impl AppState {
                 self.send_config();
             }
 
-            ui.collapsing("Ranges", |ui| {
-                ui.horizontal(|ui| {
-                    let response = ui.add(
-                        egui::DragValue::new(&mut self.config.player.sound.footstep_diameter)
-                            .speed(10.0)
-                            .range(200.0..=6000.0),
-                    );
+            ui.add_space(3.0);
+            ui.label(egui::RichText::new("Ranges").strong().size(12.5));
+            ui.horizontal(|ui| {
+                let response = ui.add(
+                    egui::DragValue::new(&mut self.config.player.sound.footstep_diameter)
+                        .speed(10.0)
+                        .range(200.0..=6000.0),
+                );
 
-                    ui.label("Footstep");
+                ui.label("Footstep");
 
-                    if ui.button("↺").on_hover_text("Reset").clicked() {
-                        self.config.player.sound.footstep_diameter =
-                            crate::constants::cs2::SOUND_ESP_FOOTSTEP_DIAMETER_DEFAULT;
-                        self.send_config();
-                    }
-                    if response.changed() {
-                        self.send_config();
-                    }
-                });
+                if ui.button("↺").on_hover_text("Reset").clicked() {
+                    self.config.player.sound.footstep_diameter =
+                        crate::constants::cs2::SOUND_ESP_FOOTSTEP_DIAMETER_DEFAULT;
+                    self.send_config();
+                }
+                if response.changed() {
+                    self.send_config();
+                }
+            });
 
-                ui.horizontal(|ui| {
-                    let response = ui.add(
-                        egui::DragValue::new(&mut self.config.player.sound.gunshot_diameter)
-                            .speed(10.0)
-                            .range(200.0..=10000.0),
-                    );
+            ui.horizontal(|ui| {
+                let response = ui.add(
+                    egui::DragValue::new(&mut self.config.player.sound.gunshot_diameter)
+                        .speed(10.0)
+                        .range(200.0..=10000.0),
+                );
 
-                    ui.label("Gunshot");
+                ui.label("Gunshot");
 
-                    if ui.button("↺").on_hover_text("Reset").clicked() {
-                        self.config.player.sound.gunshot_diameter =
-                            crate::constants::cs2::SOUND_ESP_GUNSHOT_DIAMETER_DEFAULT;
-                        self.send_config();
-                    }
-                    if response.changed() {
-                        self.send_config();
-                    }
-                });
+                if ui.button("↺").on_hover_text("Reset").clicked() {
+                    self.config.player.sound.gunshot_diameter =
+                        crate::constants::cs2::SOUND_ESP_GUNSHOT_DIAMETER_DEFAULT;
+                    self.send_config();
+                }
+                if response.changed() {
+                    self.send_config();
+                }
+            });
 
-                ui.horizontal(|ui| {
-                    let response = ui.add(
-                        egui::DragValue::new(&mut self.config.player.sound.weapon_diameter)
-                            .speed(10.0)
-                            .range(200.0..=6000.0),
-                    );
+            ui.horizontal(|ui| {
+                let response = ui.add(
+                    egui::DragValue::new(&mut self.config.player.sound.weapon_diameter)
+                        .speed(10.0)
+                        .range(200.0..=6000.0),
+                );
 
-                    ui.label("Weapon");
+                ui.label("Weapon");
 
-                    if ui.button("↺").on_hover_text("Reset").clicked() {
-                        self.config.player.sound.weapon_diameter =
-                            crate::constants::cs2::SOUND_ESP_WEAPON_DIAMETER_DEFAULT;
-                        self.send_config();
-                    }
-                    if response.changed() {
-                        self.send_config();
-                    }
-                });
+                if ui.button("↺").on_hover_text("Reset").clicked() {
+                    self.config.player.sound.weapon_diameter =
+                        crate::constants::cs2::SOUND_ESP_WEAPON_DIAMETER_DEFAULT;
+                    self.send_config();
+                }
+                if response.changed() {
+                    self.send_config();
+                }
             });
         });
     }

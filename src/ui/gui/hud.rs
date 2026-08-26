@@ -3,7 +3,7 @@ use egui::{DragValue, Ui};
 use crate::ui::{
     app::AppState,
     gui::helpers::{
-        checkbox, collapsing_open, color_picker, combo_box, drag, scroll, text_settings_button,
+        checkbox, color_picker, combo_box, drag, groupbox, scroll, text_settings_button,
     },
 };
 
@@ -16,87 +16,11 @@ impl AppState {
                 let right = &mut cols[1];
                 self.hud_right(right);
             });
-
-            collapsing_open(ui, "Colors", |ui| {
-                if color_picker(
-                    ui,
-                    "Crosshair Color",
-                    &mut self.config.hud.sniper_crosshair.color,
-                ) {
-                    self.send_config();
-                }
-            });
-
-            ui.collapsing("Grenade Trails", |ui| {
-                if checkbox(
-                    ui,
-                    "Enable Grenade Trails",
-                    &mut self.config.hud.grenade_trails.enabled,
-                ) {
-                    self.send_config();
-                }
-
-                if checkbox(
-                    ui,
-                    "Inferno Polygon",
-                    &mut self.config.hud.grenade_trails.inferno_poly,
-                ) {
-                    self.send_config();
-                }
-
-                if color_picker(
-                    ui,
-                    "Smoke Trail Color",
-                    &mut self.config.hud.grenade_trails.smoke,
-                ) {
-                    self.send_config();
-                }
-
-                if color_picker(
-                    ui,
-                    "Molotov Trail Color",
-                    &mut self.config.hud.grenade_trails.molotov,
-                ) {
-                    self.send_config();
-                }
-
-                if color_picker(
-                    ui,
-                    "Incendiary Trail Color",
-                    &mut self.config.hud.grenade_trails.incendiary,
-                ) {
-                    self.send_config();
-                }
-
-                if color_picker(
-                    ui,
-                    "Flash Trail Color",
-                    &mut self.config.hud.grenade_trails.flash,
-                ) {
-                    self.send_config();
-                }
-
-                if color_picker(
-                    ui,
-                    "HE Grenade Trail Color",
-                    &mut self.config.hud.grenade_trails.he,
-                ) {
-                    self.send_config();
-                }
-
-                if color_picker(
-                    ui,
-                    "Decoy Trail Color",
-                    &mut self.config.hud.grenade_trails.decoy,
-                ) {
-                    self.send_config();
-                }
-            });
         });
     }
 
     fn hud_left(&mut self, ui: &mut Ui) {
-        collapsing_open(ui, "HUD", |ui| {
+        groupbox(ui, "HUD Elements", |ui| {
             if checkbox(ui, "Watermark", &mut self.config.hud.watermark) {
                 self.send_config();
             }
@@ -141,7 +65,7 @@ impl AppState {
             });
         });
 
-        ui.collapsing("Sniper Crosshair", |ui| {
+        groupbox(ui, "Sniper Crosshair", |ui| {
             if checkbox(ui, "Enabled", &mut self.config.hud.sniper_crosshair.enabled) {
                 self.send_config();
             }
@@ -178,11 +102,19 @@ impl AppState {
             ) {
                 self.send_config();
             }
+
+            if color_picker(
+                ui,
+                "Crosshair Color",
+                &mut self.config.hud.sniper_crosshair.color,
+            ) {
+                self.send_config();
+            }
         });
     }
 
     fn hud_right(&mut self, ui: &mut Ui) {
-        collapsing_open(ui, "Appearance", |ui| {
+        groupbox(ui, "Appearance & Font", |ui| {
             if checkbox(ui, "Text Outline", &mut self.config.hud.text_outline) {
                 self.send_config();
             }
@@ -224,14 +156,80 @@ impl AppState {
             });
         });
 
-        ui.collapsing("Advanced", |ui| {
+        groupbox(ui, "Grenade Trails ESP", |ui| {
+            if checkbox(
+                ui,
+                "Enable Grenade Trails",
+                &mut self.config.hud.grenade_trails.enabled,
+            ) {
+                self.send_config();
+            }
+
+            if checkbox(
+                ui,
+                "Inferno Polygon",
+                &mut self.config.hud.grenade_trails.inferno_poly,
+            ) {
+                self.send_config();
+            }
+
+            if color_picker(
+                ui,
+                "Smoke Trail Color",
+                &mut self.config.hud.grenade_trails.smoke,
+            ) {
+                self.send_config();
+            }
+
+            if color_picker(
+                ui,
+                "Molotov Trail Color",
+                &mut self.config.hud.grenade_trails.molotov,
+            ) {
+                self.send_config();
+            }
+
+            if color_picker(
+                ui,
+                "Incendiary Trail Color",
+                &mut self.config.hud.grenade_trails.incendiary,
+            ) {
+                self.send_config();
+            }
+
+            if color_picker(
+                ui,
+                "Flash Trail Color",
+                &mut self.config.hud.grenade_trails.flash,
+            ) {
+                self.send_config();
+            }
+
+            if color_picker(
+                ui,
+                "HE Grenade Trail Color",
+                &mut self.config.hud.grenade_trails.he,
+            ) {
+                self.send_config();
+            }
+
+            if color_picker(
+                ui,
+                "Decoy Trail Color",
+                &mut self.config.hud.grenade_trails.decoy,
+            ) {
+                self.send_config();
+            }
+        });
+
+        groupbox(ui, "Performance & Debug", |ui| {
             if checkbox(ui, "Debug Overlay", &mut self.config.hud.debug) {
                 self.send_config();
             }
 
             if drag(
                 ui,
-                "FPS",
+                "FPS Cap",
                 DragValue::new(&mut self.config.fps).range(30..=500),
             ) {
                 self.send_config();

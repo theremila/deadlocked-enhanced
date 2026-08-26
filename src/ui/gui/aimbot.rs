@@ -2,9 +2,10 @@ use egui::{DragValue, Ui};
 
 use crate::ui::{
     app::AppState,
+    color::Colors,
     drag_range::DragRange,
     gui::helpers::{
-        bone_selector, checkbox, checkbox_hover, collapsing_open, combo_box, drag, keybind, scroll,
+        bone_selector, checkbox, checkbox_hover, combo_box, drag, groupbox, keybind, scroll,
     },
 };
 
@@ -17,13 +18,74 @@ pub enum AimbotTab {
 impl AppState {
     pub fn aimbot_settings(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.aimbot_tab, AimbotTab::Global, "Global");
-            ui.selectable_value(&mut self.aimbot_tab, AimbotTab::Weapon, "Weapon");
+            let accent = ui.style().visuals.selection.bg_fill;
+
+            let global_selected = self.aimbot_tab == AimbotTab::Global;
+            let (g_bg, g_text) = if global_selected {
+                (accent, Colors::TEXT)
+            } else {
+                (Colors::CARD_BG, Colors::SUBTEXT)
+            };
+            if ui
+                .add(
+                    egui::Button::new(
+                        egui::RichText::new("🌐 Global Config")
+                            .size(13.0)
+                            .color(g_text),
+                    )
+                    .fill(g_bg)
+                    .stroke(egui::Stroke::new(
+                        1.0,
+                        if global_selected {
+                            accent
+                        } else {
+                            Colors::BORDER
+                        },
+                    ))
+                    .corner_radius(egui::CornerRadius::same(5)),
+                )
+                .clicked()
+            {
+                self.aimbot_tab = AimbotTab::Global;
+            }
+
+            let weapon_selected = self.aimbot_tab == AimbotTab::Weapon;
+            let (w_bg, w_text) = if weapon_selected {
+                (accent, Colors::TEXT)
+            } else {
+                (Colors::CARD_BG, Colors::SUBTEXT)
+            };
+            if ui
+                .add(
+                    egui::Button::new(
+                        egui::RichText::new("🔫 Per-Weapon Override")
+                            .size(13.0)
+                            .color(w_text),
+                    )
+                    .fill(w_bg)
+                    .stroke(egui::Stroke::new(
+                        1.0,
+                        if weapon_selected {
+                            accent
+                        } else {
+                            Colors::BORDER
+                        },
+                    ))
+                    .corner_radius(egui::CornerRadius::same(5)),
+                )
+                .clicked()
+            {
+                self.aimbot_tab = AimbotTab::Weapon;
+            }
+
             if self.aimbot_tab == AimbotTab::Weapon {
+                ui.add_space(8.0);
                 combo_box(ui, "aimbot_weapon", "Weapon", &mut self.aimbot_weapon);
             }
         });
+        ui.add_space(4.0);
         ui.separator();
+        ui.add_space(6.0);
         ui.columns(2, |cols| {
             let left = &mut cols[0];
             scroll(left, "aimbot_left", |ui| self.aimbot_left(ui));
@@ -34,7 +96,7 @@ impl AppState {
     }
 
     fn aimbot_left(&mut self, ui: &mut Ui) {
-        collapsing_open(ui, "Aimbot", |ui| {
+        groupbox(ui, "Aimbot Activation", |ui| {
             if keybind(
                 ui,
                 "aimbot_hotkey",
@@ -73,7 +135,7 @@ impl AppState {
             }
         });
 
-        ui.collapsing("Targeting", |ui| {
+        groupbox(ui, "Targeting & FOV", |ui| {
             if checkbox(
                 ui,
                 "Target Friendlies",
@@ -170,7 +232,7 @@ impl AppState {
             }
         });
 
-        ui.collapsing("Humanization", |ui| {
+        groupbox(ui, "Humanization (ABCurves)", |ui| {
             if checkbox(
                 ui,
                 "Enable Humanization",
@@ -216,7 +278,7 @@ impl AppState {
             });
         });
 
-        ui.collapsing("Checks", |ui| {
+        groupbox(ui, "Safety & Checks", |ui| {
             if checkbox(
                 ui,
                 "Visibility Check",
@@ -261,7 +323,7 @@ impl AppState {
             }
         });
 
-        ui.collapsing("Bones", |ui| {
+        groupbox(ui, "Aimbot Bones", |ui| {
             if bone_selector(ui, &mut self.weapon_config().aimbot.bones) {
                 self.send_config();
             }
@@ -269,7 +331,7 @@ impl AppState {
     }
 
     fn aimbot_right(&mut self, ui: &mut Ui) {
-        collapsing_open(ui, "Triggerbot", |ui| {
+        groupbox(ui, "Triggerbot Activation", |ui| {
             if self.aimbot_tab == AimbotTab::Weapon
                 && checkbox(
                     ui,
@@ -389,7 +451,7 @@ impl AppState {
             }
         });
 
-        ui.collapsing("Checks\u{200b}", |ui| {
+        groupbox(ui, "Trigger Safety & Checks", |ui| {
             if checkbox(
                 ui,
                 "Visibility Check",
@@ -463,13 +525,13 @@ impl AppState {
             });
         });
 
-        ui.collapsing("Bones\u{200b}", |ui| {
+        groupbox(ui, "Trigger Bones", |ui| {
             if bone_selector(ui, &mut self.weapon_config().triggerbot.bones) {
                 self.send_config();
             }
         });
 
-        collapsing_open(ui, "RCS", |ui| {
+        groupbox(ui, "Recoil Control System (RCS)", |ui| {
             if self.aimbot_tab == AimbotTab::Weapon
                 && checkbox(
                     ui,

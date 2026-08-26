@@ -1,41 +1,92 @@
 use std::hash::Hash;
 
-use egui::{CollapsingHeader, Color32, DragValue, Event, Sense, Ui, Widget};
+use egui::{
+    Color32, CornerRadius, DragValue, Event, Frame, Margin, Sense, Stroke, Ui, Widget,
+};
 use strum::IntoEnumIterator as _;
 
 use crate::config::text::TextCategory;
 use crate::cs2::{bones::Bones, key_codes::KeyCode};
+use crate::ui::color::Colors;
+
+/// Renders a modern CS cheat framed Groupbox / Card with header and clean inner padding.
+pub fn groupbox(ui: &mut Ui, title: &str, add_body: impl FnOnce(&mut Ui)) {
+    Frame::new()
+        .fill(Colors::CARD_BG)
+        .stroke(Stroke::new(1.0, Colors::BORDER))
+        .corner_radius(CornerRadius::same(6))
+        .inner_margin(Margin::same(10))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                let accent = ui.style().visuals.selection.bg_fill;
+                // Accent indicator bar
+                let (response, painter) = ui.allocate_painter(egui::vec2(3.0, 14.0), Sense::hover());
+                painter.rect_filled(response.rect, CornerRadius::same(2), accent);
+
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(title)
+                        .strong()
+                        .size(13.5)
+                        .color(Colors::TEXT),
+                );
+            });
+            ui.add_space(3.0);
+            ui.separator();
+            ui.add_space(4.0);
+
+            add_body(ui);
+        });
+    ui.add_space(6.0);
+}
 
 pub fn bone_selector(ui: &mut Ui, bones: &mut Vec<Bones>) -> bool {
     let mut changed = false;
 
-    for bone in Bones::iter() {
-        let index = bones.iter().position(|selected| *selected == bone);
-        if ui
-            .selectable_label(index.is_some(), format!("{bone:?}"))
-            .clicked()
-        {
-            if let Some(index) = index {
-                bones.remove(index);
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
+        for bone in Bones::iter() {
+            let index = bones.iter().position(|selected| *selected == bone);
+            let is_selected = index.is_some();
+            let text = format!("{bone:?}");
+
+            let accent = ui.style().visuals.selection.bg_fill;
+            let (bg_color, text_color, border_color) = if is_selected {
+                (accent, Colors::TEXT, accent)
             } else {
-                bones.push(bone);
+                (Colors::HIGHLIGHT, Colors::SUBTEXT, Colors::BORDER)
+            };
+
+            let response = ui.add(
+                egui::Button::new(
+                    egui::RichText::new(text)
+                        .size(11.5)
+                        .color(text_color),
+                )
+                .fill(bg_color)
+                .stroke(Stroke::new(1.0, border_color))
+                .corner_radius(CornerRadius::same(4))
+                .min_size(egui::vec2(0.0, 20.0)),
+            );
+
+            if response.clicked() {
+                if let Some(index) = index {
+                    bones.remove(index);
+                } else {
+                    bones.push(bone);
+                }
+                changed = true;
             }
-            changed = true;
         }
-    }
+    });
 
     changed
 }
 
-pub fn collapsing_open(ui: &mut Ui, title: &str, add_body: impl FnOnce(&mut Ui)) {
-    CollapsingHeader::new(title)
-        .default_open(true)
-        .show(ui, add_body);
-}
-
 pub fn scroll(ui: &mut Ui, id: &str, add_content: impl FnOnce(&mut Ui)) {
     egui::ScrollArea::vertical()
-        .auto_shrink([false, true])
+        .auto_shrink([false, false])
         .id_salt(id)
         .show(ui, add_content);
 }
@@ -206,12 +257,29 @@ impl<'gui> Widget for Keybind<'gui> {
         };
 
         let text = if listening {
-            "...".to_string()
+            "[ ... ]".to_string()
         } else {
-            format!("{:?}", self.keycode)
+            format!("[ {:?} ]", self.keycode)
         };
 
-        let mut response = ui.button(text);
+        let accent = ui.style().visuals.selection.bg_fill;
+        let (bg, text_color, border) = if listening {
+            (Colors::HIGHLIGHT, accent, accent)
+        } else {
+            (Colors::HIGHLIGHT, Colors::TEXT, Colors::BORDER)
+        };
+
+        let mut response = ui.add(
+            egui::Button::new(
+                egui::RichText::new(text)
+                    .size(12.0)
+                    .monospace()
+                    .color(text_color),
+            )
+            .fill(bg)
+            .stroke(Stroke::new(1.0, border))
+            .corner_radius(CornerRadius::same(4)),
+        );
 
         if response.clicked() {
             listening = !listening;

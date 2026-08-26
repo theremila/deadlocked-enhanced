@@ -42,7 +42,9 @@ impl WindowContext {
                 .with_title("deadlocked_overlay")
         } else {
             winit::window::WindowAttributes::default()
-                .with_inner_size(winit::dpi::LogicalSize::new(750, 450))
+                .with_inner_size(winit::dpi::LogicalSize::new(680, 660))
+                .with_min_inner_size(winit::dpi::LogicalSize::new(560, 500))
+                .with_resizable(true)
                 .with_title("deadlocked")
         };
 
@@ -231,41 +233,55 @@ fn prep_ctx(ctx: &egui::Context, accent_color: egui::Color32) {
 fn gui_style(style: &mut Style, accent_color: egui::Color32) {
     style.interaction.selectable_labels = false;
     for font in style.text_styles.iter_mut() {
-        font.1.size = 16.0;
+        font.1.size = 14.0;
     }
-    //style.visuals.override_text_color = Some(Color32::WHITE);
+
+    style.spacing.item_spacing = egui::vec2(8.0, 7.0);
+    style.spacing.button_padding = egui::vec2(10.0, 5.0);
+    style.spacing.window_margin = egui::Margin::same(10);
 
     style.visuals.window_fill = Colors::BASE;
-    style.visuals.panel_fill = Colors::BASE;
+    style.visuals.panel_fill = Colors::BACKDROP;
     style.visuals.extreme_bg_color = Colors::BACKDROP;
 
-    let bg_stroke = Stroke::new(1.0f32, Colors::SUBTEXT);
-    let fg_stroke = Stroke::new(1.0f32, Colors::TEXT);
-    let dark_stroke = Stroke::new(1.0f32, Colors::BASE);
+    let border_stroke = Stroke::new(1.0f32, Colors::BORDER);
+    let hover_stroke = Stroke::new(1.0f32, Colors::BORDER_LIGHT);
+    let text_stroke = Stroke::new(1.0f32, Colors::TEXT);
+    let subtext_stroke = Stroke::new(1.0f32, Colors::SUBTEXT);
+    let accent_stroke = Stroke::new(1.0f32, accent_color);
 
     style.visuals.selection.bg_fill = accent_color;
-    style.visuals.selection.stroke = dark_stroke;
+    style.visuals.selection.stroke = Stroke::NONE;
 
-    style.visuals.widgets.active.bg_fill = Colors::HIGHLIGHT;
-    style.visuals.widgets.active.bg_stroke = bg_stroke;
-    style.visuals.widgets.active.fg_stroke = fg_stroke;
-    style.visuals.widgets.active.weak_bg_fill = Colors::HIGHLIGHT;
-
-    style.visuals.widgets.hovered.bg_fill = Colors::HIGHLIGHT;
-    style.visuals.widgets.hovered.bg_stroke = bg_stroke;
-    style.visuals.widgets.hovered.fg_stroke = fg_stroke;
-    style.visuals.widgets.hovered.weak_bg_fill = Colors::HIGHLIGHT;
+    let corner_radius = egui::CornerRadius::same(5);
 
     style.visuals.widgets.inactive.bg_fill = Colors::HIGHLIGHT;
-    style.visuals.widgets.inactive.fg_stroke = fg_stroke;
-    style.visuals.widgets.inactive.weak_bg_fill = Colors::HIGHLIGHT;
+    style.visuals.widgets.inactive.bg_stroke = border_stroke;
+    style.visuals.widgets.inactive.fg_stroke = subtext_stroke;
+    style.visuals.widgets.inactive.weak_bg_fill = Colors::CARD_BG;
+    style.visuals.widgets.inactive.corner_radius = corner_radius;
 
-    style.visuals.widgets.noninteractive.bg_fill = Colors::HIGHLIGHT;
-    style.visuals.widgets.noninteractive.fg_stroke = fg_stroke;
-    style.visuals.widgets.noninteractive.weak_bg_fill = Colors::HIGHLIGHT;
+    style.visuals.widgets.hovered.bg_fill = Colors::HOVER;
+    style.visuals.widgets.hovered.bg_stroke = hover_stroke;
+    style.visuals.widgets.hovered.fg_stroke = text_stroke;
+    style.visuals.widgets.hovered.weak_bg_fill = Colors::HIGHLIGHT;
+    style.visuals.widgets.hovered.corner_radius = corner_radius;
 
-    style.visuals.widgets.open.bg_fill = Colors::HIGHLIGHT;
-    style.visuals.widgets.open.bg_stroke = bg_stroke;
-    style.visuals.widgets.open.fg_stroke = fg_stroke;
-    style.visuals.widgets.open.weak_bg_fill = Colors::HIGHLIGHT;
+    style.visuals.widgets.active.bg_fill = accent_color;
+    style.visuals.widgets.active.bg_stroke = accent_stroke;
+    style.visuals.widgets.active.fg_stroke = text_stroke;
+    style.visuals.widgets.active.weak_bg_fill = Colors::HOVER;
+    style.visuals.widgets.active.corner_radius = corner_radius;
+
+    style.visuals.widgets.noninteractive.bg_fill = Colors::CARD_BG;
+    style.visuals.widgets.noninteractive.bg_stroke = border_stroke;
+    style.visuals.widgets.noninteractive.fg_stroke = subtext_stroke;
+    style.visuals.widgets.noninteractive.weak_bg_fill = Colors::CARD_BG;
+    style.visuals.widgets.noninteractive.corner_radius = corner_radius;
+
+    style.visuals.widgets.open.bg_fill = Colors::HOVER;
+    style.visuals.widgets.open.bg_stroke = accent_stroke;
+    style.visuals.widgets.open.fg_stroke = text_stroke;
+    style.visuals.widgets.open.weak_bg_fill = Colors::CARD_BG;
+    style.visuals.widgets.open.corner_radius = corner_radius;
 }
