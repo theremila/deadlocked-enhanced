@@ -247,7 +247,7 @@ impl AppState {
         const PADDING: egui::Vec2 = egui::vec2(10.0, 5.0);
         const SCREEN_MARGIN: f32 = 12.0;
         const CORNER_RADIUS: f32 = 4.0;
-        const BG_COLOR: Color32 = Color32::from_rgba_unmultiplied(0, 0, 0, 180);
+        const BG_COLOR: Color32 = Color32::from_black_alpha(180);
 
         let text = format!("deadlocked.enhanced / {} fps", self.fps());
         let font = egui::FontId::proportional(FONT_SIZE);
