@@ -32,6 +32,7 @@ pub struct Data {
     pub window_position: Vec2,
     pub window_size: Vec2,
     pub aimbot_active: bool,
+    pub aim_target_position: Option<Vec3>,
     pub triggerbot_active: bool,
     pub esp_active: bool,
 }

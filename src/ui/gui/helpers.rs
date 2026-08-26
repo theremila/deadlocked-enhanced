@@ -1,9 +1,31 @@
 use std::hash::Hash;
 
 use egui::{CollapsingHeader, Color32, DragValue, Event, Sense, Ui, Widget};
+use strum::IntoEnumIterator as _;
 
 use crate::config::text::TextCategory;
-use crate::cs2::key_codes::KeyCode;
+use crate::cs2::{bones::Bones, key_codes::KeyCode};
+
+pub fn bone_selector(ui: &mut Ui, bones: &mut Vec<Bones>) -> bool {
+    let mut changed = false;
+
+    for bone in Bones::iter() {
+        let index = bones.iter().position(|selected| *selected == bone);
+        if ui
+            .selectable_label(index.is_some(), format!("{bone:?}"))
+            .clicked()
+        {
+            if let Some(index) = index {
+                bones.remove(index);
+            } else {
+                bones.push(bone);
+            }
+            changed = true;
+        }
+    }
+
+    changed
+}
 
 pub fn collapsing_open(ui: &mut Ui, title: &str, add_body: impl FnOnce(&mut Ui)) {
     CollapsingHeader::new(title)

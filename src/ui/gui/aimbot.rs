@@ -1,18 +1,14 @@
 use egui::{DragValue, Ui};
-use strum::IntoEnumIterator as _;
 
-use crate::{
-    cs2::bones::Bones,
-    ui::{
-        app::AppState,
-        drag_range::DragRange,
-        gui::helpers::{
-            checkbox, checkbox_hover, collapsing_open, combo_box, drag, keybind, scroll,
-        },
+use crate::ui::{
+    app::AppState,
+    drag_range::DragRange,
+    gui::helpers::{
+        bone_selector, checkbox, checkbox_hover, collapsing_open, combo_box, drag, keybind, scroll,
     },
 };
 
-#[derive(PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum AimbotTab {
     Global,
     Weapon,
@@ -78,15 +74,6 @@ impl AppState {
         });
 
         ui.collapsing("Targeting", |ui| {
-            if combo_box(
-                ui,
-                "aimbot_fov_mode",
-                "FOV Mode",
-                &mut self.weapon_config().aimbot.fov_mode,
-            ) {
-                self.send_config();
-            }
-
             if checkbox(
                 ui,
                 "Target Friendlies",
@@ -192,38 +179,41 @@ impl AppState {
                 self.send_config();
             }
 
-            if drag(
-                ui,
-                "Curve / Bow",
-                DragValue::new(&mut self.weapon_config().aimbot.curve)
-                    .range(0.0..=1.0)
-                    .speed(0.005)
-                    .max_decimals(2),
-            ) {
-                self.send_config();
-            }
+            let enabled = self.weapon_config().aimbot.humanize;
+            ui.add_enabled_ui(enabled, |ui| {
+                if drag(
+                    ui,
+                    "Curve",
+                    DragValue::new(&mut self.weapon_config().aimbot.curve)
+                        .range(0.0..=1.0)
+                        .speed(0.005)
+                        .max_decimals(2),
+                ) {
+                    self.send_config();
+                }
 
-            if drag(
-                ui,
-                "Tremor / Noise",
-                DragValue::new(&mut self.weapon_config().aimbot.tremor)
-                    .range(0.0..=1.0)
-                    .speed(0.005)
-                    .max_decimals(2),
-            ) {
-                self.send_config();
-            }
+                if drag(
+                    ui,
+                    "Tremor",
+                    DragValue::new(&mut self.weapon_config().aimbot.tremor)
+                        .range(0.0..=1.0)
+                        .speed(0.005)
+                        .max_decimals(2),
+                ) {
+                    self.send_config();
+                }
 
-            if drag(
-                ui,
-                "Overshoot",
-                DragValue::new(&mut self.weapon_config().aimbot.overshoot)
-                    .range(0.0..=1.0)
-                    .speed(0.005)
-                    .max_decimals(2),
-            ) {
-                self.send_config();
-            }
+                if drag(
+                    ui,
+                    "Overshoot",
+                    DragValue::new(&mut self.weapon_config().aimbot.overshoot)
+                        .range(0.0..=1.0)
+                        .speed(0.005)
+                        .max_decimals(2),
+                ) {
+                    self.send_config();
+                }
+            });
         });
 
         ui.collapsing("Checks", |ui| {
@@ -235,13 +225,16 @@ impl AppState {
                 self.send_config();
             }
 
-            if checkbox(
-                ui,
-                "Through Walls",
-                &mut self.weapon_config().aimbot.through_walls,
-            ) {
-                self.send_config();
-            }
+            let visibility_check = self.weapon_config().aimbot.visibility_check;
+            ui.add_enabled_ui(visibility_check, |ui| {
+                if checkbox(
+                    ui,
+                    "Through Walls",
+                    &mut self.weapon_config().aimbot.through_walls,
+                ) {
+                    self.send_config();
+                }
+            });
 
             if checkbox(
                 ui,
@@ -269,22 +262,8 @@ impl AppState {
         });
 
         ui.collapsing("Bones", |ui| {
-            for bone in Bones::iter() {
-                let text = format!("{:?}", bone);
-                let index = self
-                    .weapon_config()
-                    .aimbot
-                    .bones
-                    .iter()
-                    .position(|b| *b == bone);
-                if ui.selectable_label(index.is_some(), text).clicked() {
-                    if let Some(index) = index {
-                        self.weapon_config().aimbot.bones.remove(index);
-                    } else {
-                        self.weapon_config().aimbot.bones.push(bone);
-                    }
-                    self.send_config();
-                }
+            if bone_selector(ui, &mut self.weapon_config().aimbot.bones) {
+                self.send_config();
             }
         });
     }
@@ -419,13 +398,16 @@ impl AppState {
                 self.send_config();
             }
 
-            if checkbox(
-                ui,
-                "Through Walls",
-                &mut self.weapon_config().triggerbot.through_walls,
-            ) {
-                self.send_config();
-            }
+            let visibility_check = self.weapon_config().triggerbot.visibility_check;
+            ui.add_enabled_ui(visibility_check, |ui| {
+                if checkbox(
+                    ui,
+                    "Through Walls",
+                    &mut self.weapon_config().triggerbot.through_walls,
+                ) {
+                    self.send_config();
+                }
+            });
 
             if checkbox(
                 ui,
@@ -468,33 +450,22 @@ impl AppState {
                 self.send_config();
             }
 
-            if drag(
-                ui,
-                "Velocity Threshold",
-                DragValue::new(&mut self.weapon_config().triggerbot.velocity_threshold)
-                    .range(0..=5000),
-            ) {
-                self.send_config();
-            }
+            let velocity_check = self.weapon_config().triggerbot.velocity_check;
+            ui.add_enabled_ui(velocity_check, |ui| {
+                if drag(
+                    ui,
+                    "Velocity Threshold",
+                    DragValue::new(&mut self.weapon_config().triggerbot.velocity_threshold)
+                        .range(0..=5000),
+                ) {
+                    self.send_config();
+                }
+            });
         });
 
         ui.collapsing("Bones\u{200b}", |ui| {
-            for bone in Bones::iter() {
-                let text = format!("{:?}", bone);
-                let index = self
-                    .weapon_config()
-                    .triggerbot
-                    .bones
-                    .iter()
-                    .position(|b| *b == bone);
-                if ui.selectable_label(index.is_some(), text).clicked() {
-                    if let Some(index) = index {
-                        self.weapon_config().triggerbot.bones.remove(index);
-                    } else {
-                        self.weapon_config().triggerbot.bones.push(bone);
-                    }
-                    self.send_config();
-                }
+            if bone_selector(ui, &mut self.weapon_config().triggerbot.bones) {
+                self.send_config();
             }
         });
 

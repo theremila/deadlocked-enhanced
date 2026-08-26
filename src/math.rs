@@ -12,12 +12,31 @@ pub fn angles_from_vector(forward: &Vec3) -> Vec2 {
 }
 
 pub fn angles_to_fov(view_angles: &Vec2, aim_angles: &Vec2) -> f32 {
-    let delta = view_angles - aim_angles;
+    let view_pitch = view_angles.x.to_radians();
+    let view_yaw = view_angles.y.to_radians();
+    let aim_pitch = aim_angles.x.to_radians();
+    let aim_yaw = aim_angles.y.to_radians();
 
-    let pitch = (delta.x + 180.0).rem_euclid(360.0) - 180.0;
-    let yaw = (delta.y + 180.0).rem_euclid(360.0) - 180.0;
+    let view = Vec3::new(
+        view_pitch.cos() * view_yaw.cos(),
+        view_pitch.cos() * view_yaw.sin(),
+        -view_pitch.sin(),
+    );
+    let aim = Vec3::new(
+        aim_pitch.cos() * aim_yaw.cos(),
+        aim_pitch.cos() * aim_yaw.sin(),
+        -aim_pitch.sin(),
+    );
 
-    Vec2::new(pitch.abs(), yaw.abs()).length()
+    view.dot(aim).clamp(-1.0, 1.0).acos().to_degrees()
+}
+
+pub fn forward_ray_offset(distance: f32, angle: f32) -> Option<f32> {
+    if !distance.is_finite() || !angle.is_finite() || distance < 0.0 || angle >= 90.0 {
+        return None;
+    }
+
+    Some(distance * angle.to_radians().sin())
 }
 
 pub fn vec2_clamp(vec: &mut Vec2) {
@@ -124,5 +143,31 @@ pub fn record_acceleration(
         if history.len() > max_size {
             history.pop_back();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn angular_fov_handles_wraparound() {
+        let view = Vec2::new(0.0, 179.0);
+        let target = Vec2::new(0.0, -179.0);
+
+        assert!((angles_to_fov(&view, &target) - 2.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn forward_ray_rejects_targets_behind_view() {
+        assert_eq!(forward_ray_offset(100.0, 180.0), None);
+        assert_eq!(forward_ray_offset(100.0, 90.0), None);
+    }
+
+    #[test]
+    fn forward_ray_reports_perpendicular_offset() {
+        let offset = forward_ray_offset(100.0, 30.0).unwrap();
+
+        assert!((offset - 50.0).abs() < 0.001);
     }
 }

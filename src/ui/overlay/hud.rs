@@ -71,7 +71,6 @@ impl AppState {
             return;
         }
 
-        let fov_units = weapon_config.fov;
         let stroke_color = if data.aimbot_active {
             Color32::GREEN
         } else {
@@ -79,57 +78,17 @@ impl AppState {
         };
         let stroke = Stroke::new(self.config.hud.line_width, stroke_color);
 
-        match weapon_config.fov_mode {
-            crate::config::aim::FovMode::TargetBone => {
-                let targets = if weapon_config.target_friendlies {
-                    data.players.iter().chain(data.friendlies.iter())
-                } else {
-                    data.players.iter().chain([].iter())
-                };
+        let Some(position) = data.aim_target_position else {
+            return;
+        };
+        let Some(screen_position) = world_to_screen(&position, data) else {
+            return;
+        };
+        let Some(radius) = self.calculate_unit_radius_px(data, &position, weapon_config.fov) else {
+            return;
+        };
 
-                let screen_center = pos2(data.window_size.x / 2.0, data.window_size.y / 2.0);
-
-                for player in targets {
-                    if player.health <= 0 {
-                        continue;
-                    }
-
-                    if weapon_config.visibility_check && !player.visible {
-                        continue;
-                    }
-
-                    let head_pos = player.head;
-                    let Some(screen_pos) = world_to_screen(&head_pos, data) else {
-                        continue;
-                    };
-
-                    let Some(radius) = self.calculate_unit_radius_px(data, &head_pos, fov_units) else {
-                        continue;
-                    };
-
-                    // Check if crosshair is inside this bone FOV circle to give visual feedback
-                    let dist_to_crosshair = screen_center.distance(screen_pos);
-                    let target_stroke = if dist_to_crosshair <= radius {
-                        Stroke::new(self.config.hud.line_width * 1.5, Color32::GREEN)
-                    } else {
-                        stroke
-                    };
-
-                    painter.circle_stroke(screen_pos, radius, target_stroke);
-                }
-            }
-            crate::config::aim::FovMode::Crosshair => {
-                let fov_rad = (self.get_current_fov().to_radians() / 2.0).tan();
-                let radius = if fov_rad > 0.001 {
-                    let focal_length_px = (data.window_size.x * 0.5) / fov_rad;
-                    (fov_units / 500.0) * focal_length_px
-                } else {
-                    50.0
-                };
-                let center = pos2(data.window_size.x / 2.0, data.window_size.y / 2.0);
-                painter.circle_stroke(center, radius, stroke);
-            }
-        }
+        painter.circle_stroke(screen_position, radius, stroke);
     }
 
     fn calculate_unit_radius_px(
@@ -138,23 +97,25 @@ impl AppState {
         position: &Vec3,
         radius_units: f32,
     ) -> Option<f32> {
-        let vm = &data.view_matrix;
-        let w = vm.w_axis.x * position.x
-            + vm.w_axis.y * position.y
-            + vm.w_axis.z * position.z
-            + vm.w_axis.w;
+        let matrix = &data.view_matrix;
+        let row_x = matrix.x_axis.truncate();
+        let row_y = matrix.y_axis.truncate();
+        let row_w = matrix.w_axis.truncate();
+        let clip_x = row_x.dot(*position) + matrix.x_axis.w;
+        let clip_y = row_y.dot(*position) + matrix.y_axis.w;
+        let w = row_w.dot(*position) + matrix.w_axis.w;
 
         if w < 0.01 {
             return None;
         }
 
-        let fov_rad = (self.get_current_fov().to_radians() / 2.0).tan();
-        if fov_rad <= 0.001 {
-            return None;
-        }
-        let focal_length_px = (data.window_size.x * 0.5) / fov_rad;
-        let radius_px = (radius_units / w) * focal_length_px;
-        Some(radius_px)
+        let ndc_x_per_unit = (row_x * w - row_w * clip_x).length() / w.powi(2);
+        let ndc_y_per_unit = (row_y * w - row_w * clip_y).length() / w.powi(2);
+        let radius_x = radius_units * ndc_x_per_unit * data.window_size.x * 0.5;
+        let radius_y = radius_units * ndc_y_per_unit * data.window_size.y * 0.5;
+        let radius = (radius_x + radius_y) * 0.5;
+
+        radius.is_finite().then_some(radius)
     }
 
     pub fn draw_keybind_list(&self, painter: &Painter, data: &Data) {
@@ -230,31 +191,6 @@ impl AppState {
             );
         }
     }
-
-    #[allow(dead_code)]
-    fn get_current_fov(&self) -> f32 {
-        (if self.config.misc.fov_changer {
-            self.config.misc.desired_fov
-        } else {
-            crate::constants::cs2::DEFAULT_FOV
-        }) as f32
-    }
-
-    #[allow(dead_code)]
-    fn calculate_fov_radius(&self, data: &Data, target_fov: f32) -> f32 {
-        let current_fov = self.get_current_fov();
-        let screen_width = data.window_size.x;
-
-        let current_fov_tan = (current_fov.to_radians() / 2.0).tan();
-        if current_fov_tan == 0.0 {
-            return 0.0;
-        }
-
-        let target_fov_tan = (target_fov.to_radians() / 2.0).tan();
-        (target_fov_tan / current_fov_tan) * (screen_width / 2.0)
-    }
-
-
 
     pub fn draw_sniper_crosshair(&self, painter: &Painter, data: &Data) {
         if !self.config.hud.sniper_crosshair.enabled

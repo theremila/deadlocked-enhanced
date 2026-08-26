@@ -10,7 +10,7 @@ use crate::{
         bones::Bones,
         entity::{player::Player, weapon_class::WeaponClass},
     },
-    math::angles_to_fov,
+    math::{angles_to_fov, forward_ray_offset},
     os::mouse::Mouse,
 };
 
@@ -33,10 +33,7 @@ fn bone_hitbox_radius(bone: Bones) -> f32 {
         | Bones::RightElbow
         | Bones::LeftHand
         | Bones::RightHand => 4.5,
-        Bones::LeftHip
-        | Bones::RightHip
-        | Bones::LeftKnee
-        | Bones::RightKnee => 5.0,
+        Bones::LeftHip | Bones::RightHip | Bones::LeftKnee | Bones::RightKnee => 5.0,
         Bones::LeftFoot | Bones::RightFoot => 4.0,
     }
 }
@@ -103,7 +100,9 @@ impl CS2 {
                     let dist = eye_pos.distance(bone_pos).max(1.0);
                     let target_angle = self.angle_to_target(&local_player, &bone_pos, &Vec2::ZERO);
                     let fov = angles_to_fov(&view_angles, &target_angle);
-                    let offset_units = dist * fov.to_radians().sin();
+                    let Some(offset_units) = forward_ray_offset(dist, fov) else {
+                        continue;
+                    };
                     let bone_radius = bone_hitbox_radius(bone);
 
                     if offset_units <= bone_radius {
@@ -168,7 +167,9 @@ impl CS2 {
 
                     let angle = self.angle_to_target(&local_player, &bone_pos, &Vec2::ZERO);
                     let fov = angles_to_fov(&view_angles, &angle);
-                    let offset_units = dist * fov.to_radians().sin();
+                    let Some(offset_units) = forward_ray_offset(dist, fov) else {
+                        continue;
+                    };
                     let bone_radius = bone_hitbox_radius(bone);
 
                     if offset_units <= bone_radius && offset_units < smallest_offset {
@@ -205,9 +206,12 @@ impl CS2 {
         if config.prefer_center {
             let target_angle = self.angle_to_target(&local_player, &best_bone_pos, &Vec2::ZERO);
             let fov = angles_to_fov(&view_angles, &target_angle);
-            let offset_units = best_dist * fov.to_radians().sin();
+            let Some(offset_units) = forward_ray_offset(best_dist, fov) else {
+                return;
+            };
             let base_radius = bone_hitbox_radius(best_target_bone);
-            let max_allowed_offset = base_radius * (config.center_tolerance / 100.0).clamp(0.01, 1.0);
+            let max_allowed_offset =
+                base_radius * (config.center_tolerance / 100.0).clamp(0.01, 1.0);
             if offset_units > max_allowed_offset {
                 return;
             }
@@ -239,7 +243,8 @@ impl CS2 {
             let spread_radius = best_dist * total_inaccuracy;
             let target_radius = bone_hitbox_radius(best_target_bone);
 
-            let calculated_hitchance = (target_radius / (spread_radius + target_radius)).powi(2) * 100.0;
+            let calculated_hitchance =
+                (target_radius / (spread_radius + target_radius)).powi(2) * 100.0;
             if calculated_hitchance < config.hitchance {
                 return;
             }

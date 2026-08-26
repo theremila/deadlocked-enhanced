@@ -262,6 +262,10 @@ impl CS2 {
         } else {
             false
         };
+        data.aim_target_position = self.target.player.as_ref().and_then(|player| {
+            let position = player.bone_position(self, self.target.bone_index);
+            position.is_finite().then_some(position)
+        });
         data.triggerbot_active = if self.triggerbot_config(config).mode == KeyMode::Toggle {
             self.trigger.active
         } else {

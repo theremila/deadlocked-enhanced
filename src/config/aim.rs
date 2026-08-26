@@ -36,7 +36,6 @@ pub struct AimbotConfig {
     pub mode: KeyMode,
     pub target_friendlies: bool,
     pub distance_adjusted_fov: bool,
-    pub fov_mode: FovMode,
     pub start_bullet: i32,
     pub visibility_check: bool,
     pub through_walls: bool,
@@ -65,7 +64,6 @@ impl Default for AimbotConfig {
             mode: KeyMode::Hold,
             target_friendlies: false,
             distance_adjusted_fov: true,
-            fov_mode: FovMode::TargetBone,
             start_bullet: 0,
             visibility_check: true,
             through_walls: false,
@@ -118,12 +116,6 @@ impl Default for RcsConfig {
 pub enum KeyMode {
     Hold,
     Toggle,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, EnumIter)]
-pub enum FovMode {
-    Crosshair,
-    TargetBone,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, EnumIter)]
