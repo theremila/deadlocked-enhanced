@@ -44,4 +44,15 @@ impl Input {
         !self.previous_state.get(key.usize()).unwrap_or(false)
             && self.current_state.get(key.usize()).unwrap_or(false)
     }
+
+    #[cfg(test)]
+    pub fn set_test_keys(&mut self, keys: &[KeyCode]) {
+        let mut state = vec![0_u8; Self::MAX_KEY / 8];
+        for key in keys {
+            let index = key.usize();
+            state[index / 8] |= 1 << (index % 8);
+        }
+        std::mem::swap(&mut self.previous_state, &mut self.current_state);
+        self.current_state = DynamicBitSet::from(state);
+    }
 }

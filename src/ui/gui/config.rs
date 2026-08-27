@@ -66,7 +66,7 @@ impl AppState {
                     Colors::ACCENT_COLORS
                         .iter()
                         .find(|c| c.1 == self.config.accent_color)
-                        .unwrap_or(&Colors::ACCENT_COLORS[5])
+                        .unwrap_or(&Colors::ACCENT_COLORS[0])
                         .0,
                 )
                 .show_ui(ui, |ui| {

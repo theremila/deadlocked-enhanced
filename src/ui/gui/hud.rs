@@ -1,11 +1,14 @@
 use egui::{DragValue, Ui};
 
-use crate::ui::{
-    app::AppState,
-    gui::{
-        FeatureSettingsPopup,
-        helpers::{
-            checkbox, collapsing_open, color_picker, combo_box, drag, scroll, text_settings_button,
+use crate::{
+    config::bind::{HudSetting, SettingId},
+    ui::{
+        app::AppState,
+        gui::{
+            FeatureSettingsPopup,
+            helpers::{
+                collapsing_open, color_picker, combo_box, drag, scroll, text_settings_button,
+            },
         },
     },
 };
@@ -15,11 +18,11 @@ impl AppState {
         ui.columns(2, |cols| {
             scroll(&mut cols[0], "hud_main_left", |ui| {
                 collapsing_open(ui, "HUD", |ui| {
-                    if checkbox(ui, "Watermark", &mut self.config.hud.watermark) {
+                    if self.bool_setting(ui, "Watermark", SettingId::Hud(HudSetting::Watermark)) {
                         self.send_config();
                     }
                     self.hud_text_toggle(ui, "Bomb Timer", "bomb_timer", 0);
-                    if checkbox(ui, "FOV Circle", &mut self.config.hud.fov_circle) {
+                    if self.bool_setting(ui, "FOV Circle", SettingId::Hud(HudSetting::FovCircle)) {
                         self.send_config();
                     }
                     self.hud_text_toggle(ui, "Dropped Weapons", "weapon_name", 1);
@@ -33,7 +36,8 @@ impl AppState {
             });
             scroll(&mut cols[1], "hud_main_right", |ui| {
                 collapsing_open(ui, "Sniper Crosshair", |ui| {
-                    if checkbox(ui, "Enabled", &mut self.config.hud.sniper_crosshair.enabled) {
+                    if self.bool_setting(ui, "Enabled", SettingId::Hud(HudSetting::SniperCrosshair))
+                    {
                         self.send_config();
                     }
                     if ui.button("⚙ Settings").clicked() {
@@ -41,7 +45,7 @@ impl AppState {
                     }
                 });
                 collapsing_open(ui, "Grenade Trails", |ui| {
-                    if checkbox(ui, "Enabled", &mut self.config.hud.grenade_trails.enabled) {
+                    if self.bool_setting(ui, "Enabled", SettingId::Hud(HudSetting::GrenadeTrails)) {
                         self.send_config();
                     }
                     if ui.button("⚙ Settings").clicked() {
@@ -55,13 +59,14 @@ impl AppState {
 
     fn hud_text_toggle(&mut self, ui: &mut Ui, label: &str, popup: &str, field: u8) {
         ui.horizontal(|ui| {
-            let changed = match field {
-                0 => checkbox(ui, label, &mut self.config.hud.bomb_timer),
-                1 => checkbox(ui, label, &mut self.config.hud.dropped_weapons),
-                2 => checkbox(ui, label, &mut self.config.hud.keybind_list),
-                3 => checkbox(ui, label, &mut self.config.hud.spectator_list),
-                _ => checkbox(ui, label, &mut self.config.hud.status_indicators),
+            let setting = match field {
+                0 => HudSetting::BombTimer,
+                1 => HudSetting::DroppedWeapons,
+                2 => HudSetting::KeybindList,
+                3 => HudSetting::SpectatorList,
+                _ => HudSetting::StatusIndicators,
             };
+            let changed = self.bool_setting(ui, label, SettingId::Hud(setting));
             if changed {
                 self.send_config();
             }
@@ -106,7 +111,7 @@ impl AppState {
 
     fn hud_details(&mut self, ui: &mut Ui) {
         ui.heading("Appearance");
-        if checkbox(ui, "Text Outline", &mut self.config.hud.text_outline) {
+        if self.bool_setting(ui, "Text Outline", SettingId::Hud(HudSetting::TextOutline)) {
             self.send_config();
         }
         if drag(
@@ -138,7 +143,7 @@ impl AppState {
         }
         ui.separator();
         ui.heading("Advanced");
-        if checkbox(ui, "Debug Overlay", &mut self.config.hud.debug) {
+        if self.bool_setting(ui, "Debug Overlay", SettingId::Hud(HudSetting::Debug)) {
             self.send_config();
         }
         if drag(
@@ -187,10 +192,10 @@ impl AppState {
     }
 
     fn trail_details(&mut self, ui: &mut Ui) {
-        if checkbox(
+        if self.bool_setting(
             ui,
             "Inferno Polygon",
-            &mut self.config.hud.grenade_trails.inferno_poly,
+            SettingId::Hud(HudSetting::InfernoPolygon),
         ) {
             self.send_config();
         }

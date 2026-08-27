@@ -2,8 +2,8 @@ use egui::{Align2, Color32, Painter, Pos2, Stroke, pos2, vec2};
 use glam::Vec3;
 
 use crate::{
-    config::aim::KeyMode, config::text::TextPosition, cs2::entity::weapon_class::WeaponClass,
-    data::Data, math::world_to_screen, ui::app::AppState,
+    config::text::TextPosition, cs2::entity::weapon_class::WeaponClass, data::Data,
+    math::world_to_screen, ui::app::AppState,
 };
 
 impl AppState {
@@ -66,8 +66,7 @@ impl AppState {
 
         let weapon_config = self.aimbot_config(&data.weapon);
 
-        if !weapon_config.enabled || (weapon_config.mode == KeyMode::Toggle && !data.aimbot_active)
-        {
+        if !weapon_config.enabled || !data.aimbot_active {
             return;
         }
 
@@ -130,33 +129,27 @@ impl AppState {
             10.0,
             0.0,
         );
-        let aimbot_color = if data.aimbot_active {
-            Color32::GREEN
-        } else {
-            cat.color
-        };
-        self.text_sized(
-            painter,
-            format!("Aimbot: {:?}", self.config.aim.aimbot_hotkey),
-            position,
-            cat.align.to_align2(),
-            aimbot_color,
-            cat.font_size,
-        );
-
-        let triggerbot_color = if data.triggerbot_active {
-            Color32::GREEN
-        } else {
-            cat.color
-        };
-        self.text_sized(
-            painter,
-            format!("Triggerbot: {:?}", self.config.aim.triggerbot_hotkey),
-            position + vec2(0.0, cat.font_size),
-            cat.align.to_align2(),
-            triggerbot_color,
-            cat.font_size,
-        );
+        for (index, binding) in self
+            .config
+            .binds
+            .iter()
+            .filter(|binding| !binding.chord_text().is_empty())
+            .enumerate()
+        {
+            let active = data
+                .bound_values
+                .get(&binding.target)
+                .copied()
+                .unwrap_or(false);
+            self.text_sized(
+                painter,
+                format!("{}: {}", binding.target.label(), binding.chord_text()),
+                position + vec2(0.0, cat.font_size * index as f32),
+                cat.align.to_align2(),
+                if active { Color32::GREEN } else { cat.color },
+                cat.font_size,
+            );
+        }
     }
 
     pub fn draw_spectator_list(&self, painter: &Painter, data: &Data) {

@@ -1,12 +1,14 @@
 use egui::{DragValue, Ui};
 
-use crate::ui::{
-    app::AppState,
-    gui::{
-        FeatureSettingsPopup,
-        helpers::{
-            checkbox, checkbox_hover, collapsing_open, color_picker, combo_box, drag, keybind,
-            scroll, text_settings_button,
+use crate::{
+    config::bind::{PlayerSetting, SettingId},
+    ui::{
+        app::AppState,
+        gui::{
+            FeatureSettingsPopup,
+            helpers::{
+                collapsing_open, color_picker, combo_box, drag, scroll, text_settings_button,
+            },
         },
     },
 };
@@ -16,14 +18,10 @@ impl AppState {
         ui.columns(2, |cols| {
             scroll(&mut cols[0], "player_main_left", |ui| {
                 collapsing_open(ui, "Players", |ui| {
-                    if checkbox(ui, "Enable Player ESP", &mut self.config.player.enabled) {
-                        self.send_config();
-                    }
-                    if keybind(
+                    if self.bool_setting(
                         ui,
-                        "esp_hotkey",
-                        "Hotkey",
-                        &mut self.config.player.esp_hotkey,
+                        "Enable Player ESP",
+                        SettingId::Player(PlayerSetting::Enabled),
                     ) {
                         self.send_config();
                     }
@@ -32,7 +30,11 @@ impl AppState {
                     }
                 });
                 collapsing_open(ui, "Out Of Field Arrows", |ui| {
-                    if checkbox(ui, "Enable OOF Arrows", &mut self.config.player.oof_arrows) {
+                    if self.bool_setting(
+                        ui,
+                        "Enable OOF Arrows",
+                        SettingId::Player(PlayerSetting::OofArrows),
+                    ) {
                         self.send_config();
                     }
                     if ui.button("⚙ Settings").clicked() {
@@ -42,11 +44,11 @@ impl AppState {
             });
             scroll(&mut cols[1], "player_main_right", |ui| {
                 collapsing_open(ui, "Sound ESP", |ui| {
-                    if checkbox_hover(
+                    if self.bool_setting_hover(
                         ui,
                         "Enable Sound ESP",
-                        "Show a circle under players when they make sound",
-                        &mut self.config.player.sound.enabled,
+                        Some("Show a circle under players when they make sound"),
+                        SettingId::Player(PlayerSetting::SoundEsp),
                     ) {
                         self.send_config();
                     }
@@ -96,21 +98,21 @@ impl AppState {
 
     fn player_details(&mut self, ui: &mut Ui) {
         ui.heading("Rendering");
-        if checkbox(ui, "Chicken", &mut self.config.player.chicken) {
+        if self.bool_setting(ui, "Chicken", SettingId::Player(PlayerSetting::Chicken)) {
             self.send_config();
         }
-        if checkbox(
+        if self.bool_setting(
             ui,
             "Show Friendlies",
-            &mut self.config.player.show_friendlies,
+            SettingId::Player(PlayerSetting::ShowFriendlies),
         ) {
             self.send_config();
         }
-        if checkbox_hover(
+        if self.bool_setting_hover(
             ui,
             "Visible Only",
-            "Only show visible players",
-            &mut self.config.player.visible_only,
+            Some("Only show visible players"),
+            SettingId::Player(PlayerSetting::VisibleOnly),
         ) {
             self.send_config();
         }
@@ -128,16 +130,24 @@ impl AppState {
         ) {
             self.send_config();
         }
-        if checkbox(ui, "Head Circle", &mut self.config.player.head_circle) {
+        if self.bool_setting(
+            ui,
+            "Head Circle",
+            SettingId::Player(PlayerSetting::HeadCircle),
+        ) {
             self.send_config();
         }
 
         ui.separator();
         ui.heading("Info");
-        if checkbox(ui, "Health Bar", &mut self.config.player.health_bar) {
+        if self.bool_setting(
+            ui,
+            "Health Bar",
+            SettingId::Player(PlayerSetting::HealthBar),
+        ) {
             self.send_config();
         }
-        if checkbox(ui, "Armor Bar", &mut self.config.player.armor_bar) {
+        if self.bool_setting(ui, "Armor Bar", SettingId::Player(PlayerSetting::ArmorBar)) {
             self.send_config();
         }
         self.player_text_toggle(ui, "Player Name", "player_name", 0);
@@ -171,11 +181,12 @@ impl AppState {
 
     fn player_text_toggle(&mut self, ui: &mut Ui, label: &str, popup: &str, field: u8) {
         ui.horizontal(|ui| {
-            let changed = match field {
-                0 => checkbox(ui, label, &mut self.config.player.player_name),
-                1 => checkbox(ui, label, &mut self.config.player.weapon_icon),
-                _ => checkbox(ui, label, &mut self.config.player.tags),
+            let setting = match field {
+                0 => PlayerSetting::PlayerName,
+                1 => PlayerSetting::WeaponIcon,
+                _ => PlayerSetting::Tags,
             };
+            let changed = self.bool_setting(ui, label, SettingId::Player(setting));
             if changed {
                 self.send_config();
             }
@@ -184,11 +195,11 @@ impl AppState {
     }
 
     fn oof_details(&mut self, ui: &mut Ui) {
-        if checkbox_hover(
+        if self.bool_setting_hover(
             ui,
             "Offscreen Only",
-            "Only show arrows for players outside the screen FOV",
-            &mut self.config.player.oof_offscreen_only,
+            Some("Only show arrows for players outside the screen FOV"),
+            SettingId::Player(PlayerSetting::OofOffscreenOnly),
         ) {
             self.send_config();
         }
@@ -228,10 +239,10 @@ impl AppState {
         ) {
             self.send_config();
         }
-        if checkbox(
+        if self.bool_setting(
             ui,
             "Show Visible",
-            &mut self.config.player.sound.show_visible,
+            SettingId::Player(PlayerSetting::SoundShowVisible),
         ) {
             self.send_config();
         }

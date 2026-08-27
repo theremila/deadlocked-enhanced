@@ -42,7 +42,7 @@ impl WindowContext {
                 .with_title("deadlocked_overlay")
         } else {
             winit::window::WindowAttributes::default()
-                .with_inner_size(winit::dpi::LogicalSize::new(750, 450))
+                .with_inner_size(winit::dpi::LogicalSize::new(880, 560))
                 .with_title("deadlocked")
         };
 
@@ -231,13 +231,21 @@ fn prep_ctx(ctx: &egui::Context, accent_color: egui::Color32) {
 fn gui_style(style: &mut Style, accent_color: egui::Color32) {
     style.interaction.selectable_labels = false;
     for font in style.text_styles.iter_mut() {
-        font.1.size = 16.0;
+        font.1.size = 14.0;
     }
     //style.visuals.override_text_color = Some(Color32::WHITE);
 
     style.visuals.window_fill = Colors::BASE;
     style.visuals.panel_fill = Colors::BASE;
     style.visuals.extreme_bg_color = Colors::BACKDROP;
+    style.spacing.item_spacing = egui::vec2(7.0, 6.0);
+    style.spacing.button_padding = egui::vec2(8.0, 5.0);
+    style.spacing.window_margin = egui::Margin::same(10);
+    style.visuals.window_corner_radius = egui::CornerRadius::same(6);
+    style.visuals.menu_corner_radius = egui::CornerRadius::same(4);
+    style.visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(3);
+    style.visuals.widgets.hovered.corner_radius = egui::CornerRadius::same(3);
+    style.visuals.widgets.active.corner_radius = egui::CornerRadius::same(3);
 
     let bg_stroke = Stroke::new(1.0f32, Colors::SUBTEXT);
     let fg_stroke = Stroke::new(1.0f32, Colors::TEXT);

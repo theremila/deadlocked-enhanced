@@ -54,7 +54,15 @@ impl GameManager {
         loop {
             let start = Instant::now();
             while let Ok(message) = self.channel.try_receive() {
-                self.config = *message.0;
+                match message {
+                    GameMessage::Config(config) => {
+                        self.config = *config;
+                        self.cs2.rebaseline_binds(&self.config);
+                    }
+                    GameMessage::BindCapture(capturing) => {
+                        self.cs2.set_bind_capture(capturing);
+                    }
+                }
             }
 
             let mut is_valid = self.cs2.is_valid();
@@ -74,7 +82,7 @@ impl GameManager {
                 }
                 self.cs2.run(&self.config, &mut self.mouse);
                 let mut data = self.data.lock();
-                self.cs2.data(&self.config, &mut data);
+                self.cs2.data(&mut data);
             } else {
                 *self.data.lock() = Data::default();
             }
