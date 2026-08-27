@@ -36,6 +36,20 @@ pub enum Tab {
     Application,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum FeatureSettingsPopup {
+    Player,
+    OofArrows,
+    SoundEsp,
+    Hud,
+    SniperCrosshair,
+    GrenadeTrails,
+    Bunnyhop,
+    NoFlash,
+    Smokes,
+    FovChanger,
+}
+
 impl AppState {
     pub fn send_config(&self) {
         self.send_message(GameMessage(Box::new(self.config.clone())));

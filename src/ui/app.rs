@@ -24,7 +24,10 @@ use crate::{
     message::{GameMessage, GameStatus, UiMessage},
     ui::{
         grenades::{Grenade, GrenadeList, read_grenades},
-        gui::{Tab, aimbot::AimbotTab},
+        gui::{
+            FeatureSettingsPopup, Tab,
+            aimbot::{AimSettingsPopup, AimbotTab},
+        },
         trail::Trail,
         window_context::WindowContext,
     },
@@ -55,6 +58,8 @@ pub struct AppState {
     pub current_tab: Tab,
     pub aimbot_tab: AimbotTab,
     pub aimbot_weapon: Weapon,
+    pub aim_settings_popup: Option<AimSettingsPopup>,
+    pub feature_settings_popup: Option<FeatureSettingsPopup>,
 
     pub update_status: UpdateStatus,
 
@@ -112,6 +117,8 @@ impl AppState {
             current_tab: Tab::Aimbot,
             aimbot_tab: AimbotTab::Global,
             aimbot_weapon: Weapon::Ak47,
+            aim_settings_popup: None,
+            feature_settings_popup: None,
             update_status,
             text_popup: None,
             update_popup,

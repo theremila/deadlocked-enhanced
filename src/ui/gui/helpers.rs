@@ -60,6 +60,15 @@ pub fn drag(ui: &mut Ui, label: &str, drag: DragValue) -> bool {
     .changed()
 }
 
+pub fn drag_hover(ui: &mut Ui, label: &str, hover_text: &str, drag: DragValue) -> bool {
+    ui.horizontal(|ui| {
+        let changed = ui.add(drag).on_hover_text(hover_text).changed();
+        ui.label(label).on_hover_text(hover_text);
+        changed
+    })
+    .inner
+}
+
 pub fn combo_box<T: std::fmt::Debug + strum::IntoEnumIterator + PartialEq>(
     ui: &mut Ui,
     id: &str,
