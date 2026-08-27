@@ -141,6 +141,7 @@ impl CS2 {
         offsets.controller.color = client.get("CCSPlayerController", "m_iCompTeammateColor")?;
         offsets.controller.action_tracking_services =
             client.get("CCSPlayerController", "m_pActionTrackingServices")?;
+        offsets.controller.tick_base = client.get("CBasePlayerController", "m_nTickBase");
 
         offsets.pawn.health = client.get("C_BaseEntity", "m_iHealth")?;
         offsets.pawn.armor = client.get("C_CSPlayerPawn", "m_ArmorValue")?;
@@ -215,6 +216,27 @@ impl CS2 {
         offsets.weapon.item = client.get("C_AttributeContainer", "m_Item")?;
         offsets.weapon.clip_primary = client.get("C_BasePlayerWeapon", "m_iClip1")?;
         offsets.weapon.reserve_ammo = client.get("C_BasePlayerWeapon", "m_pReserveAmmo")?;
+        offsets.weapon.next_primary_attack_tick =
+            client.get("C_BasePlayerWeapon", "m_nNextPrimaryAttackTick");
+
+        offsets.weapon_accuracy.vdata = client.get("C_BaseEntity", "m_nSubclassID").map(|o| o + 8);
+        offsets.weapon_accuracy.spread = client.get("CCSWeaponBaseVData", "m_flSpread");
+        offsets.weapon_accuracy.inaccuracy_crouch =
+            client.get("CCSWeaponBaseVData", "m_flInaccuracyCrouch");
+        offsets.weapon_accuracy.inaccuracy_stand =
+            client.get("CCSWeaponBaseVData", "m_flInaccuracyStand");
+        offsets.weapon_accuracy.inaccuracy_move =
+            client.get("CCSWeaponBaseVData", "m_flInaccuracyMove");
+        offsets.weapon_accuracy.inaccuracy_jump_initial =
+            client.get("CCSWeaponBaseVData", "m_flInaccuracyJumpInitial");
+        offsets.weapon_accuracy.inaccuracy_jump_apex =
+            client.get("CCSWeaponBaseVData", "m_flInaccuracyJumpApex");
+        offsets.weapon_accuracy.max_speed = client.get("CCSWeaponBaseVData", "m_flMaxSpeed");
+        offsets.weapon_accuracy.weapon_mode = client.get("C_CSWeaponBase", "m_weaponMode");
+        offsets.weapon_accuracy.turning_inaccuracy =
+            client.get("C_CSWeaponBase", "m_flTurningInaccuracy");
+        offsets.weapon_accuracy.accuracy_penalty =
+            client.get("C_CSWeaponBase", "m_fAccuracyPenalty");
 
         offsets.econ_item_view.item_definition_index =
             client.get("C_EconItemView", "m_iItemDefinitionIndex")?;

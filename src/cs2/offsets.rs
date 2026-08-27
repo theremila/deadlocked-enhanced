@@ -42,6 +42,7 @@ pub struct PlayerControllerOffsets {
     pub owner_entity: usize,             // i32 (h_pOwnerEntity)
     pub color: usize,                    // i32 (m_iCompTeammateColor)
     pub action_tracking_services: usize, // Pointer -> ActionTrackingServices (m_pActionTrackingServices)
+    pub tick_base: Option<usize>,        // i32 (m_nTickBase)
 }
 
 #[derive(Default)]
@@ -145,6 +146,22 @@ pub struct WeaponOffsets {
     pub item: usize,              // EconItemView (m_Item)
     pub clip_primary: usize,      // i32 (m_iClip1)
     pub reserve_ammo: usize,      // i32[2] (m_pReserveAmmo)
+    pub next_primary_attack_tick: Option<usize>, // i32 (m_nNextPrimaryAttackTick)
+}
+
+#[derive(Default)]
+pub struct WeaponAccuracyOffsets {
+    pub vdata: Option<usize>,
+    pub spread: Option<usize>,
+    pub inaccuracy_crouch: Option<usize>,
+    pub inaccuracy_stand: Option<usize>,
+    pub inaccuracy_move: Option<usize>,
+    pub inaccuracy_jump_initial: Option<usize>,
+    pub inaccuracy_jump_apex: Option<usize>,
+    pub max_speed: Option<usize>,
+    pub weapon_mode: Option<usize>,
+    pub turning_inaccuracy: Option<usize>,
+    pub accuracy_penalty: Option<usize>,
 }
 
 #[derive(Default)]
@@ -188,6 +205,7 @@ pub struct Offsets {
     pub observer_services: ObserverServicesOffsets,
     pub aim_punch_services: AimPunchServicesOffsets,
     pub weapon: WeaponOffsets,
+    pub weapon_accuracy: WeaponAccuracyOffsets,
     pub econ_item_view: EconItemViewOffsets,
     pub planted_c4: PlantedC4Offsets,
     pub entity_identity: EntityIdentityOffsets,

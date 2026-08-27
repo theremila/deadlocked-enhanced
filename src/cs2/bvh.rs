@@ -2,7 +2,10 @@ use std::collections::HashSet;
 
 use bytemuck::{Pod, Zeroable};
 
-use crate::{cs2::CS2, parser::bvh::Triangle};
+use crate::{
+    cs2::CS2,
+    parser::bvh::{Surface, Triangle},
+};
 
 pub fn read_bvh(cs2: &CS2) -> Option<Vec<Triangle>> {
     let wld: usize = cs2.process.read(cs2.offsets.direct.vphys_world);
@@ -76,7 +79,9 @@ pub fn read_bvh(cs2: &CS2) -> Option<Vec<Triangle>> {
         // work through all nodes
         let mut seen = HashSet::new();
         for shape in leaves {
-            seen.insert(shape);
+            if !seen.insert(shape) {
+                continue;
+            }
             // process shape, might be either hull or mesh
             process_shape(cs2, shape, &mut triangles);
         }
@@ -131,13 +136,17 @@ fn process_mesh(cs2: &CS2, shape: usize, triangles: &mut Vec<Triangle>) {
         size_of::<Tri>(),
         mesh_triangles.count as usize,
     );
-
     for triangle in mesh_triangles {
         let v0 = vertices[triangle.idx[0] as usize];
         let v1 = vertices[triangle.idx[1] as usize];
         let v2 = vertices[triangle.idx[2] as usize];
 
-        triangles.push(Triangle { v0, v1, v2 });
+        triangles.push(Triangle {
+            v0,
+            v1,
+            v2,
+            surface: Surface::Unknown,
+        });
     }
 }
 
@@ -196,7 +205,12 @@ fn process_hull(cs2: &CS2, shape: usize, triangles: &mut Vec<Triangle>) {
                 let v1 = face_vertices[i];
                 let v2 = face_vertices[i + 1];
 
-                triangles.push(Triangle { v0, v1, v2 });
+                triangles.push(Triangle {
+                    v0,
+                    v1,
+                    v2,
+                    surface: Surface::Unknown,
+                });
             }
         }
     }

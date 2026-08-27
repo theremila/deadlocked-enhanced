@@ -1,7 +1,11 @@
-use egui::{Align, Color32, StrokeKind, Ui};
+use egui::{Align, Ui};
 
 use crate::{
-    config::{aim::WeaponConfig, write_config},
+    config::{
+        aim::WeaponConfig,
+        bind::{BindMode, KeyChord, SettingBind, SettingId},
+        write_config,
+    },
     data::Data,
     message::{GameMessage, GameStatus},
     ui::{
@@ -9,7 +13,7 @@ use crate::{
         color::Colors,
         gui::{
             aimbot::AimbotTab,
-            helpers::{open_url, text_settings_popup},
+            helpers::{bool_setting_row, key_chord, open_url, text_settings_popup},
         },
         window_context::WindowContext,
     },
@@ -25,7 +29,7 @@ mod hud;
 mod player;
 mod r#unsafe;
 
-#[derive(PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Aimbot,
     Player,
@@ -36,72 +40,23 @@ pub enum Tab {
     Application,
 }
 
-fn sidebar_tab(ui: &mut Ui, current_tab: &mut Tab, tab: Tab, icon: &str, title: &str) {
-    let is_selected = *current_tab == tab;
-    let accent = ui.style().visuals.selection.bg_fill;
-
-    let (bg_color, text_color, border_stroke) = if is_selected {
-        (
-            Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), 40),
-            Colors::TEXT,
-            egui::Stroke::new(
-                1.0,
-                Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), 120),
-            ),
-        )
-    } else {
-        (Color32::TRANSPARENT, Colors::SUBTEXT, egui::Stroke::NONE)
-    };
-
-    let desired_size = egui::vec2(ui.available_width(), 32.0);
-    let (rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
-
-    if response.clicked() {
-        *current_tab = tab;
-    }
-
-    let is_hovered = response.hovered() && !is_selected;
-    let final_bg = if is_hovered {
-        Color32::from_rgba_unmultiplied(255, 255, 255, 12)
-    } else {
-        bg_color
-    };
-    let final_text_color = if is_hovered {
-        Colors::TEXT
-    } else {
-        text_color
-    };
-
-    let painter = ui.painter();
-    painter.rect_filled(rect, egui::CornerRadius::same(5), final_bg);
-    if is_selected {
-        painter.rect_stroke(
-            rect,
-            egui::CornerRadius::same(5),
-            border_stroke,
-            StrokeKind::Inside,
-        );
-        let indicator_rect = egui::Rect::from_min_size(
-            egui::pos2(rect.min.x + 3.0, rect.min.y + 6.0),
-            egui::vec2(3.0, rect.height() - 12.0),
-        );
-        painter.rect_filled(indicator_rect, egui::CornerRadius::same(2), accent);
-    }
-
-    let text = format!("{icon}  {title}");
-    let font_id = egui::FontId::proportional(13.5);
-    painter.text(
-        egui::pos2(rect.min.x + 12.0, rect.center().y),
-        egui::Align2::LEFT_CENTER,
-        text,
-        font_id,
-        final_text_color,
-    );
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum FeatureSettingsPopup {
+    Player,
+    OofArrows,
+    SoundEsp,
+    Hud,
+    SniperCrosshair,
+    GrenadeTrails,
+    Bunnyhop,
+    NoFlash,
+    Smokes,
+    FovChanger,
 }
 
 impl AppState {
     pub fn send_config(&self) {
-        self.send_message(GameMessage(Box::new(self.config.clone())));
+        self.send_message(GameMessage::Config(Box::new(self.config.clone())));
         self.save();
     }
 
@@ -111,113 +66,231 @@ impl AppState {
         }
     }
 
+    pub fn bool_setting(&mut self, ui: &mut Ui, label: &str, id: SettingId) -> bool {
+        self.bool_setting_hover(ui, label, None, id)
+    }
+
+    pub fn bool_setting_hover(
+        &mut self,
+        ui: &mut Ui,
+        label: &str,
+        hover_text: Option<&str>,
+        id: SettingId,
+    ) -> bool {
+        let mut value = self.config.bool_value(&id);
+        let has_bind = self.config.binds.iter().any(|binding| binding.target == id);
+        let active = self
+            .data
+            .lock()
+            .bound_values
+            .get(&id)
+            .copied()
+            .unwrap_or(value);
+        let response = bool_setting_row(ui, label, &mut value, has_bind, active);
+        if let Some(text) = hover_text {
+            response.response.clone().on_hover_text(text);
+        }
+        if response.open_bind {
+            if self.bind_popup.is_none() {
+                self.send_message(GameMessage::BindCapture(true));
+            }
+            self.bind_popup = Some(id.clone());
+        }
+        if response.changed {
+            self.config.set_bool(&id, value);
+        }
+        response.changed
+    }
+
     fn save(&self) {
         write_config(&self.config, &self.current_config);
     }
 
+    fn render_bind_popup(&mut self, ui: &mut Ui) {
+        let Some(target) = self.bind_popup.clone() else {
+            return;
+        };
+        let mut open = true;
+        let mut changed = false;
+        let mut close = false;
+        egui::Window::new("Keybinds")
+            .id(egui::Id::new("setting_bind_editor"))
+            .collapsible(false)
+            .resizable(false)
+            .default_width(330.0)
+            .open(&mut open)
+            .show(ui.ctx(), |ui| {
+                ui.label(egui::RichText::new(format!("{target:?}")).weak());
+                ui.label("Right-click a setting row to edit its binds.");
+                ui.separator();
+
+                let binding_index = self
+                    .config
+                    .binds
+                    .iter()
+                    .position(|binding| binding.target == target);
+                let Some(binding_index) = binding_index else {
+                    if ui.button("+ Add bind").clicked() {
+                        self.config.binds.push(SettingBind {
+                            target: target.clone(),
+                            mode: BindMode::Toggle,
+                            chords: vec![KeyChord::default()],
+                        });
+                        changed = true;
+                    }
+                    return;
+                };
+
+                let binding = &mut self.config.binds[binding_index];
+                ui.horizontal(|ui| {
+                    ui.label("Default mode");
+                    changed |= ui
+                        .selectable_value(&mut binding.mode, BindMode::Toggle, "Toggle")
+                        .clicked();
+                    changed |= ui
+                        .selectable_value(&mut binding.mode, BindMode::Hold, "Hold")
+                        .clicked();
+                });
+                ui.add_space(4.0);
+
+                let mut remove = None;
+                for (index, chord) in binding.chords.iter_mut().enumerate() {
+                    egui::Frame::new()
+                        .fill(ui.visuals().extreme_bg_color)
+                        .corner_radius(4.0)
+                        .inner_margin(egui::Margin::same(6))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                changed |= ui.checkbox(&mut chord.enabled, "").changed();
+                                changed |= key_chord(ui, ("setting_chord", &target, index), chord);
+                                egui::ComboBox::from_id_salt(("chord_mode", &target, index))
+                                    .selected_text(match chord.mode {
+                                        Some(mode) => format!("{mode:?}"),
+                                        None => format!("Default ({:?})", binding.mode),
+                                    })
+                                    .show_ui(ui, |ui| {
+                                        changed |= ui
+                                            .selectable_value(&mut chord.mode, None, "Default")
+                                            .clicked();
+                                        changed |= ui
+                                            .selectable_value(
+                                                &mut chord.mode,
+                                                Some(BindMode::Toggle),
+                                                "Toggle",
+                                            )
+                                            .clicked();
+                                        changed |= ui
+                                            .selectable_value(
+                                                &mut chord.mode,
+                                                Some(BindMode::Hold),
+                                                "Hold",
+                                            )
+                                            .clicked();
+                                    });
+                                if ui.small_button("×").on_hover_text("Delete bind").clicked() {
+                                    remove = Some(index);
+                                }
+                            });
+                        });
+                    ui.add_space(3.0);
+                }
+                if let Some(index) = remove {
+                    binding.chords.remove(index);
+                    changed = true;
+                }
+
+                let mut remove_binding = false;
+                ui.horizontal(|ui| {
+                    if ui.button("+ New chord").clicked() {
+                        binding.chords.push(KeyChord::default());
+                        changed = true;
+                    }
+                    if ui.button("Remove all").clicked() {
+                        remove_binding = true;
+                    }
+                });
+                if remove_binding {
+                    self.config.binds.remove(binding_index);
+                    changed = true;
+                    close = true;
+                }
+            });
+
+        if changed {
+            self.send_config();
+        }
+        if !open || close {
+            self.bind_popup = None;
+            self.send_message(GameMessage::BindCapture(false));
+        }
+    }
+
     fn gui(&mut self, ui: &mut Ui) {
         ui.ctx().set_pixels_per_point(self.display_scale);
-
+        egui::Panel::top("menu_header")
+            .exact_size(48.0)
+            .frame(
+                egui::Frame::new()
+                    .fill(Colors::BASE)
+                    .inner_margin(egui::Margin::symmetric(16, 0)),
+            )
+            .show(ui, |ui| {
+                ui.horizontal_centered(|ui| {
+                    ui.label(
+                        egui::RichText::new("dead")
+                            .strong()
+                            .size(20.0)
+                            .color(self.config.accent_color),
+                    );
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    ui.label(egui::RichText::new("locked").strong().size(20.0));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            egui::RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
+                                .color(Colors::SUBTEXT),
+                        );
+                    });
+                });
+            });
         egui::Panel::left("sidebar")
             .resizable(false)
+            .exact_size(154.0)
             .frame(
                 egui::Frame::new()
                     .fill(Colors::BACKDROP)
-                    .inner_margin(egui::Margin::symmetric(10, 12)),
+                    .inner_margin(egui::Margin::symmetric(8, 12)),
             )
             .show(ui, |ui| {
-                ui.set_width(170.0);
-                // Header Logo
-                ui.add_space(2.0);
-                let accent = ui.style().visuals.selection.bg_fill;
-                ui.label(
-                    egui::RichText::new("DEADLOCKED")
-                        .strong()
-                        .size(15.5)
-                        .color(accent),
-                );
-                ui.label(
-                    egui::RichText::new("ENHANCED CS2")
-                        .size(9.0)
-                        .strong()
-                        .color(Colors::MUTED),
-                );
-                ui.add_space(6.0);
-                ui.separator();
-                ui.add_space(6.0);
+                for (tab, label) in [
+                    (Tab::Aimbot, "Aim & Trigger"),
+                    (Tab::Player, "Player"),
+                    (Tab::Hud, "Visuals & HUD"),
+                    (Tab::Grenades, "Grenades"),
+                    (Tab::Unsafe, "Misc"),
+                    (Tab::Config, "Configs"),
+                    (Tab::Application, "Application"),
+                ] {
+                    let selected = self.current_tab == tab;
+                    let button = egui::Button::selectable(selected, label)
+                        .min_size(egui::vec2(ui.available_width(), 32.0));
+                    if ui.add(button).clicked() {
+                        self.current_tab = tab;
+                    }
+                }
 
-                // Navigation Tabs
-                sidebar_tab(ui, &mut self.current_tab, Tab::Aimbot, "🎯", "Aimbot");
-                ui.add_space(2.0);
-                sidebar_tab(ui, &mut self.current_tab, Tab::Player, "👤", "Visuals");
-                ui.add_space(2.0);
-                sidebar_tab(ui, &mut self.current_tab, Tab::Hud, "🖥️", "HUD / ESP");
-                ui.add_space(2.0);
-                sidebar_tab(ui, &mut self.current_tab, Tab::Grenades, "💣", "Grenades");
-                ui.add_space(2.0);
-                sidebar_tab(ui, &mut self.current_tab, Tab::Unsafe, "⚡", "Misc / Unsafe");
-                ui.add_space(2.0);
-                sidebar_tab(ui, &mut self.current_tab, Tab::Config, "📁", "Configs");
-                ui.add_space(2.0);
-                sidebar_tab(ui, &mut self.current_tab, Tab::Application, "⚙️", "Settings");
-
-                // Bottom Status Card
                 ui.with_layout(egui::Layout::bottom_up(Align::Min), |ui| {
-                    ui.add_space(2.0);
-                    egui::Frame::new()
-                        .fill(Colors::CARD_BG)
-                        .stroke(egui::Stroke::new(1.0, Colors::BORDER))
-                        .corner_radius(egui::CornerRadius::same(5))
-                        .inner_margin(egui::Margin::same(7))
-                        .show(ui, |ui| {
-                            ui.set_width(ui.available_width());
-                            ui.horizontal(|ui| {
-                                let (status_text, status_color) = match self.game_status {
-                                    GameStatus::Working => ("● Connected", Colors::GREEN),
-                                    GameStatus::NotStarted => ("● Searching", Colors::YELLOW),
-                                };
-                                ui.label(
-                                    egui::RichText::new(status_text)
-                                        .size(11.0)
-                                        .color(status_color),
-                                );
-                                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                                    ui.label(
-                                        egui::RichText::new(concat!("v", env!("CARGO_PKG_VERSION")))
-                                            .size(10.0)
-                                            .color(Colors::MUTED),
-                                    );
-                                });
-                            });
+                    if ui.button("Report Issue").clicked() {
+                        open_url("https://github.com/avitran0/deadlocked/issues");
+                    }
 
-                            ui.add_space(2.0);
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "{:.1} ms · {} fps",
-                                    self.frame_avg_ms(),
-                                    self.fps()
-                                ))
-                                .size(10.0)
-                                .color(Colors::SUBTEXT),
-                            );
+                    ui.label(egui::RichText::new(format!("{}", self.game_status)).color(
+                        match self.game_status {
+                            GameStatus::Working => Colors::GREEN,
+                            GameStatus::NotStarted => Colors::YELLOW,
+                        },
+                    ));
 
-                            ui.add_space(2.0);
-                            if ui
-                                .add(
-                                    egui::Button::new(
-                                        egui::RichText::new("GitHub Issues")
-                                            .size(10.0)
-                                            .color(Colors::SUBTEXT),
-                                    )
-                                    .fill(Colors::HIGHLIGHT)
-                                    .corner_radius(egui::CornerRadius::same(3))
-                                    .min_size(egui::vec2(ui.available_width(), 16.0)),
-                                )
-                                .clicked()
-                            {
-                                open_url("https://github.com/avitran0/deadlocked/issues");
-                            }
-                        });
+                    ui.label(format!("{:.1} ms", self.frame_avg_ms()));
                 });
             });
 
@@ -225,19 +298,38 @@ impl AppState {
             .frame(
                 egui::Frame::new()
                     .fill(Colors::BASE)
-                    .inner_margin(egui::Margin::same(10)),
+                    .inner_margin(egui::Margin::same(12)),
             )
-            .show(ui, |ui| match self.current_tab {
-                Tab::Aimbot => self.aimbot_settings(ui),
-                Tab::Player => self.player_settings(ui),
-                Tab::Hud => self.hud_settings(ui),
-                Tab::Grenades => self.grenade_settings(ui),
-                Tab::Unsafe => self.unsafe_settings(ui),
-                Tab::Config => self.config_settings(ui),
-                Tab::Application => self.application_settings(ui),
+            .show(ui, |ui| {
+                let title = match self.current_tab {
+                    Tab::Aimbot => "LEGIT / ASSIST",
+                    Tab::Player => "PLAYER",
+                    Tab::Hud => "VISUALS / HUD",
+                    Tab::Grenades => "GRENADES",
+                    Tab::Unsafe => "MISC",
+                    Tab::Config => "CONFIGS",
+                    Tab::Application => "APPLICATION",
+                };
+                ui.label(
+                    egui::RichText::new(title)
+                        .strong()
+                        .size(12.0)
+                        .color(self.config.accent_color),
+                );
+                ui.separator();
+                match self.current_tab {
+                    Tab::Aimbot => self.aimbot_settings(ui),
+                    Tab::Player => self.player_settings(ui),
+                    Tab::Hud => self.hud_settings(ui),
+                    Tab::Grenades => self.grenade_settings(ui),
+                    Tab::Unsafe => self.unsafe_settings(ui),
+                    Tab::Config => self.config_settings(ui),
+                    Tab::Application => self.application_settings(ui),
+                }
             });
 
         self.render_text_popups(ui);
+        self.render_bind_popup(ui);
 
         if self.update_popup {
             let mut close = false;
@@ -399,7 +491,15 @@ impl App {
             return;
         }
 
-        overlay.run(move |ui| state.overlay(ui));
+        // Rendering consumes the same effective bool values as the game thread while
+        // preserving the user's saved/base config.
+        let bound_values = state.data.lock().bound_values.clone();
+        let saved_config = state.config.clone();
+        for (target, value) in &bound_values {
+            state.config.set_bool(target, *value);
+        }
+        overlay.run(|ui| state.overlay(ui));
+        state.config = saved_config;
         overlay.clear();
         overlay.paint();
 

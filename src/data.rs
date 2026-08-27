@@ -3,9 +3,12 @@ use std::collections::HashMap;
 use glam::{Mat4, Vec2, Vec3};
 use serde::{Deserialize, Serialize};
 
-use crate::cs2::{
-    bones::Bones,
-    entity::{EntityInfo, weapon::Weapon},
+use crate::{
+    config::bind::SettingId,
+    cs2::{
+        bones::Bones,
+        entity::{EntityInfo, weapon::Weapon},
+    },
 };
 
 #[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -35,6 +38,7 @@ pub struct Data {
     pub aim_target_position: Option<Vec3>,
     pub triggerbot_active: bool,
     pub esp_active: bool,
+    pub bound_values: HashMap<SettingId, bool>,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]

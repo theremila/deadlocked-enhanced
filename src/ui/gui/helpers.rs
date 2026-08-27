@@ -1,104 +1,147 @@
 use std::hash::Hash;
 
-use egui::{
-    Color32, CornerRadius, DragValue, Event, Frame, Margin, Sense, Stroke, Ui, Widget,
-};
+use egui::{Color32, DragValue, Event, Sense, Ui};
 use strum::IntoEnumIterator as _;
 
-use crate::config::text::TextCategory;
+use crate::config::{bind::KeyChord, text::TextCategory};
 use crate::cs2::{bones::Bones, key_codes::KeyCode};
-use crate::ui::color::Colors;
-
-/// Renders a modern CS cheat framed Groupbox / Card with header and clean inner padding.
-pub fn groupbox(ui: &mut Ui, title: &str, add_body: impl FnOnce(&mut Ui)) {
-    Frame::new()
-        .fill(Colors::CARD_BG)
-        .stroke(Stroke::new(1.0, Colors::BORDER))
-        .corner_radius(CornerRadius::same(6))
-        .inner_margin(Margin::same(10))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                let accent = ui.style().visuals.selection.bg_fill;
-                // Accent indicator bar
-                let (response, painter) = ui.allocate_painter(egui::vec2(3.0, 14.0), Sense::hover());
-                painter.rect_filled(response.rect, CornerRadius::same(2), accent);
-
-                ui.add_space(4.0);
-                ui.label(
-                    egui::RichText::new(title)
-                        .strong()
-                        .size(13.5)
-                        .color(Colors::TEXT),
-                );
-            });
-            ui.add_space(3.0);
-            ui.separator();
-            ui.add_space(4.0);
-
-            add_body(ui);
-        });
-    ui.add_space(6.0);
-}
 
 pub fn bone_selector(ui: &mut Ui, bones: &mut Vec<Bones>) -> bool {
     let mut changed = false;
 
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
-        for bone in Bones::iter() {
-            let index = bones.iter().position(|selected| *selected == bone);
-            let is_selected = index.is_some();
-            let text = format!("{bone:?}");
-
-            let accent = ui.style().visuals.selection.bg_fill;
-            let (bg_color, text_color, border_color) = if is_selected {
-                (accent, Colors::TEXT, accent)
+    for bone in Bones::iter() {
+        let index = bones.iter().position(|selected| *selected == bone);
+        if ui
+            .selectable_label(index.is_some(), format!("{bone:?}"))
+            .clicked()
+        {
+            if let Some(index) = index {
+                bones.remove(index);
             } else {
-                (Colors::HIGHLIGHT, Colors::SUBTEXT, Colors::BORDER)
-            };
-
-            let response = ui.add(
-                egui::Button::new(
-                    egui::RichText::new(text)
-                        .size(11.5)
-                        .color(text_color),
-                )
-                .fill(bg_color)
-                .stroke(Stroke::new(1.0, border_color))
-                .corner_radius(CornerRadius::same(4))
-                .min_size(egui::vec2(0.0, 20.0)),
-            );
-
-            if response.clicked() {
-                if let Some(index) = index {
-                    bones.remove(index);
-                } else {
-                    bones.push(bone);
-                }
-                changed = true;
+                bones.push(bone);
             }
+            changed = true;
         }
-    });
+    }
 
     changed
 }
 
+pub fn collapsing_open(ui: &mut Ui, title: &str, add_body: impl FnOnce(&mut Ui)) {
+    egui::Frame::new()
+        .fill(ui.visuals().extreme_bg_color)
+        .stroke(egui::Stroke::new(
+            1.0,
+            ui.visuals().widgets.noninteractive.bg_stroke.color,
+        ))
+        .corner_radius(5.0)
+        .inner_margin(egui::Margin::same(9))
+        .show(ui, |ui| {
+            ui.label(egui::RichText::new(title).strong().size(14.0));
+            let rect = ui.available_rect_before_wrap();
+            ui.painter().line_segment(
+                [rect.left_top(), egui::pos2(rect.right(), rect.top())],
+                egui::Stroke::new(1.0, ui.visuals().selection.bg_fill),
+            );
+            ui.add_space(4.0);
+            add_body(ui);
+        });
+}
+
 pub fn scroll(ui: &mut Ui, id: &str, add_content: impl FnOnce(&mut Ui)) {
     egui::ScrollArea::vertical()
-        .auto_shrink([false, false])
+        .auto_shrink([false, true])
         .id_salt(id)
         .show(ui, add_content);
 }
 
-pub fn checkbox(ui: &mut Ui, label: &str, value: &mut bool) -> bool {
-    ui.checkbox(value, label).changed()
+pub struct BoolSettingResponse {
+    pub changed: bool,
+    pub open_bind: bool,
+    pub response: egui::Response,
 }
 
-pub fn checkbox_hover(ui: &mut Ui, label: &str, hover_text: &str, value: &mut bool) -> bool {
-    ui.checkbox(value, label)
-        .on_hover_text(hover_text)
-        .changed()
+/// Flat setting row shared by every bindable boolean setting.
+pub fn bool_setting_row(
+    ui: &mut Ui,
+    label: &str,
+    value: &mut bool,
+    has_bind: bool,
+    active: bool,
+) -> BoolSettingResponse {
+    let height = 26.0;
+    let desired = egui::vec2(ui.available_width().max(120.0), height);
+    let (rect, mut response) = ui.allocate_exact_size(desired, Sense::click());
+    let visuals = ui.style().interact(&response);
+    let text_color = if ui.is_enabled() {
+        visuals.text_color()
+    } else {
+        ui.visuals().weak_text_color()
+    };
+
+    if response.hovered() {
+        ui.painter().rect_filled(
+            rect,
+            egui::CornerRadius::same(3),
+            ui.visuals().widgets.hovered.weak_bg_fill,
+        );
+    }
+    ui.painter().text(
+        egui::pos2(rect.left() + 6.0, rect.center().y),
+        egui::Align2::LEFT_CENTER,
+        label,
+        egui::TextStyle::Body.resolve(ui.style()),
+        text_color,
+    );
+
+    let switch_rect = egui::Rect::from_center_size(
+        egui::pos2(rect.right() - 20.0, rect.center().y),
+        egui::vec2(28.0, 14.0),
+    );
+    let switch_color = if *value {
+        ui.visuals().selection.bg_fill
+    } else {
+        ui.visuals().widgets.inactive.bg_fill
+    };
+    ui.painter()
+        .rect_filled(switch_rect, egui::CornerRadius::same(7), switch_color);
+    let knob_x = if *value {
+        switch_rect.right() - 7.0
+    } else {
+        switch_rect.left() + 7.0
+    };
+    ui.painter().circle_filled(
+        egui::pos2(knob_x, switch_rect.center().y),
+        5.0,
+        Color32::WHITE,
+    );
+
+    if has_bind {
+        let color = if active {
+            ui.visuals().selection.bg_fill
+        } else {
+            ui.visuals().weak_text_color()
+        };
+        ui.painter().text(
+            egui::pos2(switch_rect.left() - 9.0, rect.center().y),
+            egui::Align2::RIGHT_CENTER,
+            "B",
+            egui::TextStyle::Small.resolve(ui.style()),
+            color,
+        );
+    }
+
+    let changed = response.clicked_by(egui::PointerButton::Primary) && ui.is_enabled();
+    if changed {
+        *value = !*value;
+        response.mark_changed();
+    }
+
+    BoolSettingResponse {
+        changed,
+        open_bind: response.clicked_by(egui::PointerButton::Secondary),
+        response,
+    }
 }
 
 pub fn drag(ui: &mut Ui, label: &str, drag: DragValue) -> bool {
@@ -109,6 +152,15 @@ pub fn drag(ui: &mut Ui, label: &str, drag: DragValue) -> bool {
     })
     .inner
     .changed()
+}
+
+pub fn drag_hover(ui: &mut Ui, label: &str, hover_text: &str, drag: DragValue) -> bool {
+    ui.horizontal(|ui| {
+        let changed = ui.add(drag).on_hover_text(hover_text).changed();
+        ui.label(label).on_hover_text(hover_text);
+        changed
+    })
+    .inner
 }
 
 pub fn combo_box<T: std::fmt::Debug + strum::IntoEnumIterator + PartialEq>(
@@ -223,118 +275,82 @@ pub fn text_settings_popup(
     changed
 }
 
-pub fn keybind(ui: &mut Ui, id: &str, label: &str, keycode: &mut KeyCode) -> bool {
-    ui.horizontal(|ui| {
-        let res = ui.add(Keybind::new(keycode, id));
-        ui.label(label);
-        res
-    })
-    .inner
-    .changed()
-}
+pub fn key_chord(ui: &mut Ui, id: impl std::fmt::Debug + Hash, chord: &mut KeyChord) -> bool {
+    let listening_id = ui.make_persistent_id(egui::Id::new(id));
+    let was_listening = ui
+        .ctx()
+        .memory(|memory| memory.data.get_temp::<bool>(listening_id).unwrap_or(false));
+    let text = if was_listening {
+        "press a chord…".to_owned()
+    } else if chord.keys.is_empty() {
+        "unbound".to_owned()
+    } else {
+        chord
+            .keys
+            .iter()
+            .map(|key| format!("{key:?}"))
+            .collect::<Vec<_>>()
+            .join(" + ")
+    };
+    let response = ui.button(text);
+    let mut listening = if response.clicked() {
+        !was_listening
+    } else {
+        was_listening
+    };
+    let mut changed = false;
 
-pub struct Keybind<'gui> {
-    keycode: &'gui mut KeyCode,
-    id: egui::Id,
-}
-
-impl<'gui> Keybind<'gui> {
-    pub fn new(keycode: &'gui mut KeyCode, id: impl std::fmt::Debug + Hash) -> Self {
-        Self {
-            keycode,
-            id: egui::Id::new(id),
-        }
-    }
-}
-
-impl<'gui> Widget for Keybind<'gui> {
-    fn ui(self, ui: &mut Ui) -> egui::Response {
-        let listening_id = ui.make_persistent_id(self.id);
-
-        let mut listening = {
-            let ctx = ui.ctx();
-            ctx.memory(|mem| mem.data.get_temp::<bool>(listening_id).unwrap_or(false))
-        };
-
-        let text = if listening {
-            "[ ... ]".to_string()
-        } else {
-            format!("[ {:?} ]", self.keycode)
-        };
-
-        let accent = ui.style().visuals.selection.bg_fill;
-        let (bg, text_color, border) = if listening {
-            (Colors::HIGHLIGHT, accent, accent)
-        } else {
-            (Colors::HIGHLIGHT, Colors::TEXT, Colors::BORDER)
-        };
-
-        let mut response = ui.add(
-            egui::Button::new(
-                egui::RichText::new(text)
-                    .size(12.0)
-                    .monospace()
-                    .color(text_color),
-            )
-            .fill(bg)
-            .stroke(Stroke::new(1.0, border))
-            .corner_radius(CornerRadius::same(4)),
-        );
-
-        if response.clicked() {
-            listening = !listening;
-        }
-
-        if response.secondary_clicked() {
-            listening = false;
-        }
-
-        if listening {
-            let input = ui.input(|i| {
-                for event in &i.events {
-                    if let Event::Key {
-                        key,
-                        pressed: true,
-                        modifiers,
-                        ..
-                    } = event
-                    {
-                        if *key == egui::Key::F35 {
-                            return KeyCode::from_egui_modifiers(*modifiers);
-                        } else {
-                            return KeyCode::from_egui(*key);
-                        }
-                    }
-
-                    if let Event::PointerButton {
-                        button,
-                        pressed: true,
-                        ..
-                    } = event
-                    {
-                        return Some(KeyCode::from_egui_mouse(*button));
-                    }
+    if was_listening && !response.clicked() {
+        let captured = ui.input(|input| {
+            input.events.iter().find_map(|event| match event {
+                Event::Key {
+                    key,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } if *key != egui::Key::F35 => {
+                    let key = KeyCode::from_egui(*key)?;
+                    Some((key, *modifiers))
                 }
-                None
-            });
+                Event::PointerButton {
+                    button,
+                    pressed: true,
+                    ..
+                } => Some((KeyCode::from_egui_mouse(*button), input.modifiers)),
+                _ => None,
+            })
+        });
 
-            if let Some(input) = input {
-                if input == KeyCode::Escape {
-                    *self.keycode = KeyCode::None;
-                    response.mark_changed();
-                } else {
-                    *self.keycode = input;
-                    response.mark_changed();
-                }
+        if let Some((key, modifiers)) = captured {
+            if key == KeyCode::Escape {
                 listening = false;
+            } else if matches!(key, KeyCode::Delete | KeyCode::Backspace) {
+                chord.keys.clear();
+                listening = false;
+                changed = true;
+            } else {
+                let mut keys = Vec::with_capacity(4);
+                if modifiers.ctrl {
+                    keys.push(KeyCode::LeftControl);
+                }
+                if modifiers.shift {
+                    keys.push(KeyCode::LeftShift);
+                }
+                if modifiers.alt {
+                    keys.push(KeyCode::LeftAlt);
+                }
+                keys.push(key);
+                chord.keys = keys;
+                chord.canonicalize();
+                listening = false;
+                changed = true;
             }
         }
-
-        let ctx = ui.ctx();
-        ctx.memory_mut(|mem| mem.data.insert_temp(listening_id, listening));
-
-        response
     }
+
+    ui.ctx()
+        .memory_mut(|memory| memory.data.insert_temp(listening_id, listening));
+    changed
 }
 
 pub fn open_url(url: &str) {

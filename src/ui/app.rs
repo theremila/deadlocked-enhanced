@@ -14,6 +14,7 @@ use winit::{
 };
 
 use crate::{
+    config::bind::SettingId,
     config::{
         CONFIG_PATH, Config, DEFAULT_CONFIG_NAME,
         application::{ApplicationConfig, read_app_config},
@@ -24,7 +25,10 @@ use crate::{
     message::{GameMessage, GameStatus, UiMessage},
     ui::{
         grenades::{Grenade, GrenadeList, read_grenades},
-        gui::{Tab, aimbot::AimbotTab},
+        gui::{
+            FeatureSettingsPopup, Tab,
+            aimbot::{AimFeatureTab, AimSettingsPopup, AimbotTab},
+        },
         trail::Trail,
         window_context::WindowContext,
     },
@@ -54,13 +58,17 @@ pub struct AppState {
 
     pub current_tab: Tab,
     pub aimbot_tab: AimbotTab,
+    pub aim_feature_tab: AimFeatureTab,
     pub aimbot_weapon: Weapon,
+    pub aim_settings_popup: Option<AimSettingsPopup>,
+    pub feature_settings_popup: Option<FeatureSettingsPopup>,
 
     pub update_status: UpdateStatus,
 
     pub text_popup: Option<String>,
     pub update_popup: bool,
     pub overlay_egui: Option<egui::Context>,
+    pub bind_popup: Option<SettingId>,
 }
 
 pub struct App {
@@ -111,11 +119,15 @@ impl AppState {
             current_grenade: None,
             current_tab: Tab::Aimbot,
             aimbot_tab: AimbotTab::Global,
+            aim_feature_tab: AimFeatureTab::Aim,
             aimbot_weapon: Weapon::Ak47,
+            aim_settings_popup: None,
+            feature_settings_popup: None,
             update_status,
             text_popup: None,
             update_popup,
             overlay_egui: None,
+            bind_popup: None,
         }
     }
 

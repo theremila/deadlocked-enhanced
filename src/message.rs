@@ -20,7 +20,10 @@ impl Display for GameStatus {
 }
 
 #[derive(Clone)]
-pub struct GameMessage(pub Box<Config>);
+pub enum GameMessage {
+    Config(Box<Config>),
+    BindCapture(bool),
+}
 
 #[derive(Clone)]
 pub enum UiMessage {

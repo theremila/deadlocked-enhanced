@@ -63,18 +63,24 @@ impl Aimbot {
 
 impl CS2 {
     pub fn aimbot(&mut self, config: &Config, mouse: &mut Mouse) -> bool {
-        let hotkey = config.aim.aimbot_hotkey;
+        let master_enabled = config.aim.global.aimbot.enabled;
+        let trigger_wallbang = {
+            let trigger = self.triggerbot_config(config);
+            (
+                config.aim.global.triggerbot.enabled && trigger.enabled && trigger.through_walls,
+                trigger.min_damage,
+                trigger.head_only,
+                trigger.bones.clone(),
+            )
+        };
         let config = self.aimbot_config(config);
 
-        if !config.enabled {
+        if !master_enabled || !config.enabled {
+            self.aim.active = false;
             self.aim.reset_tracking();
             return false;
         }
-
-        if !Self::check_hotkey(&self.input, config.mode, hotkey, &mut self.aim.active) {
-            self.aim.reset_tracking();
-            return false;
-        }
+        self.aim.active = true;
 
         let Some(target) = &self.target.player else {
             self.aim.reset_tracking();
@@ -109,47 +115,48 @@ impl CS2 {
         }
 
         let eye_pos = local_player.eye_position(self);
-        let target_bone = if config
+        let target_bone = config
             .bones
             .iter()
-            .any(|b| b.u64() == self.target.bone_index)
-        {
-            self.target.bone_index
-        } else {
-            config
-                .bones
-                .first()
-                .map(|b| b.u64())
-                .unwrap_or(Bones::Head.u64())
-        };
-        let bone_pos = target.bone_position(self, target_bone);
+            .copied()
+            .find(|bone| bone.u64() == self.target.bone_index)
+            .unwrap_or(Bones::Head);
+        let target_point = self.target.position;
 
-        if config.smoke_check && self.is_line_in_smoke(eye_pos, bone_pos) {
+        if !target_point.is_finite()
+            || (config.smoke_check && self.is_line_in_smoke(eye_pos, target_point))
+        {
             return false;
         }
 
-        if config.visibility_check && !target.visible(self, &local_player) {
-            let target_bone_enum = config
-                .bones
-                .iter()
-                .find(|b| b.u64() == target_bone)
-                .cloned()
-                .unwrap_or(Bones::Head);
-            let has_armor = target.armor(self) > 0;
-            if !config.through_walls
-                || !self.can_penetrate_wall(eye_pos, bone_pos, target_bone_enum, has_armor, 1)
-            {
-                return false;
-            }
+        let trigger_allows_bone = trigger_wallbang.3.contains(&target_bone)
+            && (!trigger_wallbang.2 || target_bone == Bones::Head);
+        let allow_penetration = config.through_walls && trigger_wallbang.0 && trigger_allows_bone;
+        let Some(path) = self.evaluate_shot_path(
+            &local_player,
+            target,
+            target_point,
+            target_bone,
+            allow_penetration,
+            1,
+        ) else {
+            return false;
+        };
+        let min_damage = trigger_wallbang.1.min(target.health(self)).max(1) as f32;
+        if path.penetrated && path.damage < min_damage {
+            return false;
         }
 
         if local_player.shots_fired(self) < config.start_bullet {
             return false;
         }
 
-        let target_distance = eye_pos.distance(bone_pos).max(1.0);
-        let target_angle =
-            self.angle_to_target(&local_player, &bone_pos, &self.target.previous_aim_punch);
+        let target_distance = eye_pos.distance(target_point).max(1.0);
+        let target_angle = self.angle_to_target(
+            &local_player,
+            &target_point,
+            &self.target.previous_aim_punch,
+        );
 
         let view_angles = local_player.view_angles(self);
         let current_fov = angles_to_fov(&view_angles, &target_angle);

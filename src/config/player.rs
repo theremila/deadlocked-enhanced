@@ -22,6 +22,7 @@ pub enum BoxMode {
 pub struct PlayerConfig {
     pub enabled: bool,
     pub chicken: bool,
+    #[serde(skip_serializing)]
     pub esp_hotkey: KeyCode,
     pub show_friendlies: bool,
     pub draw_box: DrawMode,

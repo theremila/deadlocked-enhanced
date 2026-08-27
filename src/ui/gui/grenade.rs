@@ -6,7 +6,7 @@ use crate::{
         app::AppState,
         color::Colors,
         grenades::{Grenade, write_grenades},
-        gui::helpers::{groupbox, scroll},
+        gui::helpers::{collapsing_open, scroll},
     },
 };
 
@@ -19,7 +19,8 @@ impl AppState {
                 self.record_grenade(ui);
             }
 
-            groupbox(ui, "Grenade Lineup Manager", |ui| {
+            // grenade list
+            ui.collapsing("Grenade List", |ui| {
                 self.grenade_list(ui);
             });
         });
@@ -48,7 +49,7 @@ impl AppState {
                                 _ => Some((map.to_owned(), index)),
                             };
                         }
-                        if ui.button("🗑").on_hover_text("Delete").clicked() {
+                        if ui.button("Delete").clicked() {
                             delete_grenade_index = Some(index);
                         }
                     });
@@ -66,16 +67,16 @@ impl AppState {
     }
 
     fn record_grenade(&mut self, ui: &mut Ui) {
-        groupbox(ui, "Record New Grenade Lineup", |ui| {
+        collapsing_open(ui, "Add Grenade", |ui| {
             let data = self.data.lock();
 
             if !data.in_game {
-                ui.colored_label(Colors::YELLOW, "⚠ Not currently in game");
+                ui.label("Not in game.");
                 return;
             }
 
             let grenade = if !GRENADES.contains(&data.local_player.weapon) {
-                ui.colored_label(Colors::YELLOW, "⚠ Not holding a valid grenade weapon");
+                ui.colored_label(Colors::YELLOW, "Invalid Weapon");
                 return;
             } else {
                 &data.local_player.weapon
@@ -91,21 +92,11 @@ impl AppState {
                 ui.label("Instructions");
             });
 
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                ui.checkbox(&mut self.new_grenade.modifiers.jump, "Jump");
-                ui.checkbox(&mut self.new_grenade.modifiers.duck, "Duck");
-                ui.checkbox(&mut self.new_grenade.modifiers.run, "Run");
-            });
+            ui.checkbox(&mut self.new_grenade.modifiers.jump, "Jump");
+            ui.checkbox(&mut self.new_grenade.modifiers.duck, "Duck");
+            ui.checkbox(&mut self.new_grenade.modifiers.run, "Run");
 
-            ui.add_space(4.0);
-            if ui
-                .add(
-                    egui::Button::new("💾 Save Lineup")
-                        .min_size(egui::vec2(ui.available_width(), 22.0)),
-                )
-                .clicked()
-            {
+            if ui.button("Save").clicked() {
                 let map = &data.map_name;
                 let grenade_list = match self.grenades.get_mut(map) {
                     Some(list) => list,
@@ -129,7 +120,7 @@ impl AppState {
     }
 
     fn edit_grenade(&mut self, ui: &mut Ui) {
-        groupbox(ui, "Edit Selected Lineup", |ui| {
+        collapsing_open(ui, "Edit Grenade", |ui| {
             let (map, index) = match &self.current_grenade {
                 Some(grenade) => grenade,
                 None => return,
@@ -152,12 +143,9 @@ impl AppState {
                 ui.label("Description");
             });
 
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                ui.checkbox(&mut grenade.modifiers.jump, "Jump");
-                ui.checkbox(&mut grenade.modifiers.duck, "Duck");
-                ui.checkbox(&mut grenade.modifiers.run, "Run");
-            });
+            ui.checkbox(&mut grenade.modifiers.jump, "Jump");
+            ui.checkbox(&mut grenade.modifiers.duck, "Duck");
+            ui.checkbox(&mut grenade.modifiers.run, "Run");
         });
     }
 }
