@@ -41,6 +41,25 @@ pub struct Data {
     pub bound_values: HashMap<SettingId, bool>,
 }
 
+#[derive(Clone, Default)]
+pub struct RuntimeData {
+    pub aimbot_active: bool,
+    pub aim_target_position: Option<Vec3>,
+    pub triggerbot_active: bool,
+    pub esp_active: bool,
+    pub bound_values: HashMap<SettingId, bool>,
+}
+
+impl Data {
+    pub fn apply_runtime(&mut self, runtime: &RuntimeData) {
+        self.aimbot_active = runtime.aimbot_active;
+        self.aim_target_position = runtime.aim_target_position;
+        self.triggerbot_active = runtime.triggerbot_active;
+        self.esp_active = runtime.esp_active;
+        self.bound_values.clone_from(&runtime.bound_values);
+    }
+}
+
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct PlayerData {
     pub steam_id: u64,

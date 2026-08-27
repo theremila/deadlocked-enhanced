@@ -108,10 +108,10 @@ impl CS2 {
 
             let approx_angle = self.angle_to_target(&local_player, &player_pos, &aim_punch);
             let approx_fov = angles_to_fov(&view_angles, &approx_angle);
-            if let Some(approx_offset) = forward_ray_offset(approx_dist, approx_fov) {
-                if approx_offset > max_fov_units + 120.0 {
-                    continue;
-                }
+            if let Some(approx_offset) = forward_ray_offset(approx_dist, approx_fov)
+                && approx_offset > max_fov_units + 120.0
+            {
+                continue;
             }
 
             for hit in spheres(self, player, &aimbot_config.bones, false) {
@@ -159,7 +159,7 @@ impl CS2 {
         }
 
         candidates.sort_unstable_by(|left, right| left.metric.total_cmp(&right.metric));
-        let selected = candidates.iter().take(5).find(|candidate| {
+        let selected = candidates.iter().find(|candidate| {
             self.evaluate_shot_path(
                 &local_player,
                 &candidate.player,

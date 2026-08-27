@@ -21,7 +21,7 @@ use crate::{
         available_configs, parse_config, write_config,
     },
     cs2::entity::weapon::Weapon,
-    data::{Data, SoundType},
+    data::{Data, RuntimeData, SoundType},
     message::{GameMessage, GameStatus, UiMessage},
     ui::{
         grenades::{Grenade, GrenadeList, read_grenades},
@@ -38,6 +38,7 @@ use crate::{
 pub struct AppState {
     pub channel: Channel<GameMessage, UiMessage>,
     pub data: Arc<Mutex<Data>>,
+    pub runtime_data: Arc<Mutex<RuntimeData>>,
     pub render_data: Data,
 
     pub game_status: GameStatus,
@@ -92,7 +93,11 @@ impl DerefMut for App {
 }
 
 impl AppState {
-    pub fn new(channel: Channel<GameMessage, UiMessage>, data: Arc<Mutex<Data>>) -> Self {
+    pub fn new(
+        channel: Channel<GameMessage, UiMessage>,
+        data: Arc<Mutex<Data>>,
+        runtime_data: Arc<Mutex<RuntimeData>>,
+    ) -> Self {
         let config = parse_config(&CONFIG_PATH.join(DEFAULT_CONFIG_NAME));
         write_config(&config, &CONFIG_PATH.join(DEFAULT_CONFIG_NAME));
         let grenades = read_grenades();
@@ -104,6 +109,7 @@ impl AppState {
         Self {
             channel,
             data,
+            runtime_data,
             render_data: Data::default(),
             app_config,
             config,
@@ -152,8 +158,12 @@ impl AppState {
 }
 
 impl App {
-    pub fn new(channel: Channel<GameMessage, UiMessage>, data: Arc<Mutex<Data>>) -> Self {
-        let state = AppState::new(channel, data);
+    pub fn new(
+        channel: Channel<GameMessage, UiMessage>,
+        data: Arc<Mutex<Data>>,
+        runtime_data: Arc<Mutex<RuntimeData>>,
+    ) -> Self {
+        let state = AppState::new(channel, data, runtime_data);
         let ret = Self {
             gui: None,
             overlay: None,

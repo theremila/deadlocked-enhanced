@@ -3,7 +3,12 @@ use std::sync::Arc;
 use utils::{Channel, Mutex, log::LoggerOptions};
 use winit::platform::x11::EventLoopBuilderExtX11;
 
-use crate::{config::BASE_PATH, data::Data, os::mouse::check_uinput, ui::app::App};
+use crate::{
+    config::{BASE_PATH, Config},
+    data::{Data, RuntimeData},
+    os::mouse::check_uinput,
+    ui::app::App,
+};
 
 mod config;
 mod constants;
@@ -42,10 +47,18 @@ fn main() {
 
     let (channel_gui, channel_game) = Channel::new();
     let data = Arc::new(Mutex::new(Data::default()));
-    let data_game = data.clone();
+    let runtime_data = Arc::new(Mutex::new(RuntimeData::default()));
+    let shared_config = Arc::new(Mutex::new(Arc::new(Config::default())));
 
+    let runtime_game = runtime_data.clone();
+    let config_game = shared_config.clone();
     std::thread::spawn(move || {
-        game::GameManager::new(channel_game, data_game).run();
+        game::GameManager::new(channel_game, runtime_game, config_game).run();
+    });
+
+    let data_esp = data.clone();
+    std::thread::spawn(move || {
+        game::EspManager::new(data_esp, shared_config).run();
     });
 
     let event_loop = match winit::event_loop::EventLoop::builder().with_x11().build() {
@@ -56,6 +69,6 @@ fn main() {
         }
     };
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-    let mut app = App::new(channel_gui, data);
+    let mut app = App::new(channel_gui, data, runtime_data);
     event_loop.run_app(&mut app).unwrap();
 }

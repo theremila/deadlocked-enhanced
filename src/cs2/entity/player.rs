@@ -510,10 +510,7 @@ impl Player {
         bones: &HashMap<Bones, Vec3>,
     ) -> bool {
         if let Some(bvh) = &cs2.bvh {
-            const CHECKED_BONES: [Bones; 2] = [
-                Bones::Head,
-                Bones::Spine2,
-            ];
+            const CHECKED_BONES: [Bones; 2] = [Bones::Head, Bones::Spine2];
             return CHECKED_BONES.iter().any(|bone| {
                 bones
                     .get(bone)

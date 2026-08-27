@@ -23,7 +23,7 @@ use crate::{
         offsets::Offsets,
         target::Target,
     },
-    data::{Data, PlayerData},
+    data::{Data, PlayerData, RuntimeData},
     math::{angles_from_vector, vec2_clamp},
     os::{mouse::Mouse, process::Process},
     parser::{bvh::Bvh, read_map, take_material_bvh},
@@ -356,6 +356,30 @@ impl CS2 {
         } else {
             data.bomb.planted = false;
         }
+    }
+
+    pub fn set_data_config(&mut self, config: &Config) {
+        self.effective_config.clone_from(config);
+    }
+
+    pub fn refresh_data_entities(&mut self) {
+        if self.players.is_empty() || self.last_cache.elapsed() > Duration::from_millis(200) {
+            self.cache_entities();
+            self.last_cache = Instant::now();
+        }
+    }
+
+    pub fn runtime_data(&self, data: &mut RuntimeData) {
+        data.bound_values.clone_from(self.bind_runtime.values());
+        data.aimbot_active = self.aim.active;
+        data.aim_target_position = self.target.player.as_ref().and(
+            self.target
+                .position
+                .is_finite()
+                .then_some(self.target.position),
+        );
+        data.triggerbot_active = self.trigger.active;
+        data.esp_active = self.effective_config.player.enabled;
     }
 
     pub fn new() -> Self {

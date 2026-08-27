@@ -80,31 +80,20 @@ impl CS2 {
         let view_angles = local_player.view_angles(self);
         let (view_direction, _, _) = view_basis(view_angles);
         let direct_target = local_player.crosshair_entity(self);
+        let local_team = local_player.team(self);
+        let is_ffa = self.is_ffa();
         let mut best: Option<TriggerTarget> = None;
 
         for player in &self.players {
-            if (!self.is_ffa() && player.team(self) == local_player.team(self))
+            if direct_target.is_some_and(|target| target.pawn != player.pawn)
+                || (!is_ffa && player.team(self) == local_team)
                 || !player.is_valid(self)
-                || direct_target.is_some_and(|target| target.pawn != player.pawn)
             {
                 continue;
             }
 
             let required_damage = config.min_damage.min(player.health(self)).max(1) as f32;
             let is_direct_target = direct_target.is_some_and(|target| target.pawn == player.pawn);
-
-            if !is_direct_target {
-                let player_pos = player.position(self);
-                let to_player = player_pos - eye_pos;
-                let proj = to_player.dot(view_direction);
-                if proj <= 0.0 {
-                    continue;
-                }
-                let perp_dist_sq = to_player.length_squared() - proj * proj;
-                if perp_dist_sq > (60.0 + 90.0) * (60.0 + 90.0) {
-                    continue;
-                }
-            }
 
             let hit_spheres = spheres(self, player, &config.bones, config.head_only);
             let hit_capsules = capsules(&hit_spheres);

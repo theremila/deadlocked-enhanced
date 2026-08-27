@@ -406,6 +406,7 @@ impl App {
         let state = &mut self.state;
 
         state.render_data.clone_from(&state.data.lock());
+        state.render_data.apply_runtime(&state.runtime_data.lock());
 
         if let Err(err) = gui.make_current() {
             utils::error!("could not make gui window current: {err}");
