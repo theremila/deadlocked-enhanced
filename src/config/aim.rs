@@ -33,6 +33,7 @@ impl WeaponConfig {
 pub struct AimbotConfig {
     pub enable_override: bool,
     pub enabled: bool,
+    #[serde(skip_serializing)]
     pub mode: KeyMode,
     pub target_friendlies: bool,
     pub distance_adjusted_fov: bool,
@@ -131,6 +132,7 @@ pub struct TriggerbotConfig {
     pub enabled: bool,
     pub delay: RangeInclusive<u64>,
     pub shot_duration: u64,
+    #[serde(skip_serializing)]
     pub mode: KeyMode,
     pub hitchance: f32,
     pub min_damage: i32,
@@ -187,7 +189,9 @@ impl Default for TriggerbotConfig {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AimConfig {
+    #[serde(skip_serializing)]
     pub aimbot_hotkey: KeyCode,
+    #[serde(skip_serializing)]
     pub triggerbot_hotkey: KeyCode,
     pub global: WeaponConfig,
     pub weapons: HashMap<Weapon, WeaponConfig>,

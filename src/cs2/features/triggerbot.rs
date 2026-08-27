@@ -42,12 +42,11 @@ impl CS2 {
             }};
         }
 
-        let hotkey = config.aim.triggerbot_hotkey;
+        let master_enabled = config.aim.global.triggerbot.enabled;
         let config = self.triggerbot_config(config);
 
-        if !config.enabled
-            || !Self::check_hotkey(&self.input, config.mode, hotkey, &mut self.trigger.active)
-        {
+        self.trigger.active = master_enabled && config.enabled;
+        if !self.trigger.active {
             idle!();
         }
         let firing = self.trigger.shot_end.is_some();

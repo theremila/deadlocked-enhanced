@@ -22,6 +22,7 @@ pub struct UnsafeConfig {
     pub smoke_color: Color32,
     pub bunnyhop: bool,
     pub bunnyhop_mode: BunnyhopMode,
+    #[serde(skip_serializing)]
     pub bunnyhop_hotkey: KeyCode,
 }
 

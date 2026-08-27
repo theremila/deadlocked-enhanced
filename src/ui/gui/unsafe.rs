@@ -1,10 +1,13 @@
 use egui::{DragValue, Ui};
 
-use crate::ui::{
-    app::AppState,
-    gui::{
-        FeatureSettingsPopup,
-        helpers::{checkbox, collapsing_open, color_picker, combo_box, keybind, scroll},
+use crate::{
+    config::bind::{MiscSetting, SettingId},
+    ui::{
+        app::AppState,
+        gui::{
+            FeatureSettingsPopup,
+            helpers::{collapsing_open, color_picker, combo_box, scroll},
+        },
     },
 };
 
@@ -56,12 +59,13 @@ impl AppState {
         field: u8,
     ) {
         collapsing_open(ui, title, |ui| {
-            let changed = match field {
-                0 => checkbox(ui, label, &mut self.config.misc.bunnyhop),
-                1 => checkbox(ui, label, &mut self.config.misc.no_flash),
-                2 => checkbox(ui, label, &mut self.config.misc.no_smoke),
-                _ => checkbox(ui, label, &mut self.config.misc.fov_changer),
+            let setting = match field {
+                0 => MiscSetting::Bunnyhop,
+                1 => MiscSetting::NoFlash,
+                2 => MiscSetting::NoSmoke,
+                _ => MiscSetting::FovChanger,
             };
+            let changed = self.bool_setting(ui, label, SettingId::Misc(setting));
             if changed {
                 self.send_config();
             }
@@ -115,14 +119,6 @@ impl AppState {
         ) {
             self.send_config();
         }
-        if keybind(
-            ui,
-            "bunnyhop_hotkey",
-            "Hotkey",
-            &mut self.config.misc.bunnyhop_hotkey,
-        ) {
-            self.send_config();
-        }
     }
 
     fn flash_details(&mut self, ui: &mut Ui) {
@@ -146,10 +142,10 @@ impl AppState {
     }
 
     fn smoke_details(&mut self, ui: &mut Ui) {
-        if checkbox(
+        if self.bool_setting(
             ui,
             "Change Smoke Color",
-            &mut self.config.misc.change_smoke_color,
+            SettingId::Misc(MiscSetting::ChangeSmokeColor),
         ) {
             self.send_config();
         }

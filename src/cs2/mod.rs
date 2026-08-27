@@ -8,20 +8,17 @@ use glam::{IVec2, Mat4, Vec2, Vec3};
 use crate::{
     config::{
         Config,
-        aim::{AimbotConfig, KeyMode, RcsConfig, TriggerbotConfig},
+        aim::{AimbotConfig, RcsConfig, TriggerbotConfig},
     },
     constants::cs2::{self, TEAM_CT, TEAM_T},
     cs2::{
+        binds::BindRuntime,
         bones::Bones,
         entity::{
             Entity, EntityInfo, grenade_info, planted_c4::PlantedC4, player::Player, weapon::Weapon,
         },
-        features::{
-            aimbot::Aimbot, bhop::Bunnyhop, esp_toggle::EspToggle, rcs::Recoil,
-            triggerbot::Triggerbot,
-        },
+        features::{aimbot::Aimbot, bhop::Bunnyhop, rcs::Recoil, triggerbot::Triggerbot},
         input::Input,
-        key_codes::KeyCode,
         offsets::Offsets,
         target::Target,
     },
@@ -32,6 +29,7 @@ use crate::{
 };
 
 mod accuracy;
+mod binds;
 pub mod bones;
 pub mod bvh;
 pub mod entity;
@@ -59,10 +57,11 @@ pub struct CS2 {
     aim: Aimbot,
     trigger: Triggerbot,
     bhop: Bunnyhop,
-    esp: EspToggle,
     weapon: Weapon,
     planted_c4: Option<PlantedC4>,
     last_cache: Instant,
+    bind_runtime: BindRuntime,
+    effective_config: Config,
 }
 
 impl CS2 {
@@ -103,6 +102,9 @@ impl CS2 {
         }
 
         self.input.update(&self.process, &self.offsets);
+        self.bind_runtime.update(config, &self.input);
+        let effective_config = self.bind_runtime.effective_config(config);
+        let config = &effective_config;
 
         if self.last_cache.elapsed() > Duration::from_millis(200) {
             self.cache_entities();
@@ -126,8 +128,6 @@ impl CS2 {
         self.fov_changer(config);
         self.bunnyhop(config, mouse);
 
-        self.esp_toggle(config);
-
         self.find_target(config);
         let aiming = self.aimbot(config, mouse);
         self.triggerbot(config, mouse);
@@ -135,9 +135,12 @@ impl CS2 {
         if !aiming {
             self.rcs(config, mouse);
         }
+        self.effective_config = effective_config;
     }
 
-    pub fn data(&self, config: &Config, data: &mut Data) {
+    pub fn data(&self, data: &mut Data) {
+        let config = &self.effective_config;
+        data.bound_values.clone_from(self.bind_runtime.values());
         data.players.clear();
         data.friendlies.clear();
         data.spectators.clear();
@@ -264,24 +267,15 @@ impl CS2 {
         data.in_game = true;
         data.is_ffa = is_ffa;
         data.map_name = self.current_map();
-        data.aimbot_active = if self.aimbot_config(config).mode == KeyMode::Toggle {
-            self.aim.active
-        } else {
-            false
-        };
+        data.aimbot_active = self.aim.active;
         data.aim_target_position = self.target.player.as_ref().and(
             self.target
                 .position
                 .is_finite()
                 .then_some(self.target.position),
         );
-        data.triggerbot_active = if self.triggerbot_config(config).mode == KeyMode::Toggle {
-            self.trigger.active
-        } else {
-            false
-        };
-        data.esp_active = self.esp_enabled(config);
-
+        data.triggerbot_active = self.trigger.active;
+        data.esp_active = config.player.enabled;
         data.view_matrix = self.process.read::<Mat4>(self.offsets.direct.view_matrix);
         data.view_angles = local_player.view_angles(self);
 
@@ -312,11 +306,20 @@ impl CS2 {
             aim: Aimbot::default(),
             trigger: Triggerbot::default(),
             bhop: Bunnyhop::default(),
-            esp: EspToggle::default(),
             weapon: Weapon::default(),
             planted_c4: None,
             last_cache: Instant::now(),
+            bind_runtime: BindRuntime::default(),
+            effective_config: Config::default(),
         }
+    }
+
+    pub fn rebaseline_binds(&mut self, config: &Config) {
+        self.bind_runtime.rebaseline(config);
+    }
+
+    pub fn set_bind_capture(&mut self, capturing: bool) {
+        self.bind_runtime.set_suppressed(capturing);
     }
 
     fn aimbot_config<'a>(&self, config: &'a Config) -> &'a AimbotConfig {
@@ -533,18 +536,6 @@ impl CS2 {
             if self.bvh.is_some() {
                 utils::info!("loaded bvh for {current_map}");
                 self.current_bvh = current_map;
-            }
-        }
-    }
-
-    fn check_hotkey(input: &Input, mode: KeyMode, key: KeyCode, active: &mut bool) -> bool {
-        match mode {
-            KeyMode::Hold => input.is_key_pressed(key),
-            KeyMode::Toggle => {
-                if input.key_just_pressed(key) {
-                    *active = !*active;
-                }
-                *active
             }
         }
     }

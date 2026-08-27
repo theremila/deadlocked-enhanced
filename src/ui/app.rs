@@ -14,6 +14,7 @@ use winit::{
 };
 
 use crate::{
+    config::bind::SettingId,
     config::{
         CONFIG_PATH, Config, DEFAULT_CONFIG_NAME,
         application::{ApplicationConfig, read_app_config},
@@ -66,6 +67,7 @@ pub struct AppState {
     pub text_popup: Option<String>,
     pub update_popup: bool,
     pub overlay_egui: Option<egui::Context>,
+    pub bind_popup: Option<SettingId>,
 }
 
 pub struct App {
@@ -123,6 +125,7 @@ impl AppState {
             text_popup: None,
             update_popup,
             overlay_egui: None,
+            bind_popup: None,
         }
     }
 

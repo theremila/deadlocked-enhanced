@@ -60,7 +60,7 @@ impl Bunnyhop {
 
 impl CS2 {
     pub fn bunnyhop(&mut self, config: &Config, mouse: &mut Mouse) {
-        if !config.misc.bunnyhop || !self.input.is_key_pressed(config.misc.bunnyhop_hotkey) {
+        if !config.misc.bunnyhop {
             self.bhop.reset(mouse);
             return;
         }

@@ -1,7 +1,11 @@
 use egui::{Align, Ui};
 
 use crate::{
-    config::{aim::WeaponConfig, write_config},
+    config::{
+        aim::WeaponConfig,
+        bind::{BindMode, KeyChord, SettingBind, SettingId},
+        write_config,
+    },
     data::Data,
     message::{GameMessage, GameStatus},
     ui::{
@@ -9,7 +13,7 @@ use crate::{
         color::Colors,
         gui::{
             aimbot::AimbotTab,
-            helpers::{open_url, text_settings_popup},
+            helpers::{bool_setting_row, key_chord, open_url, text_settings_popup},
         },
         window_context::WindowContext,
     },
@@ -25,7 +29,7 @@ mod hud;
 mod player;
 mod r#unsafe;
 
-#[derive(PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Aimbot,
     Player,
@@ -52,7 +56,7 @@ pub enum FeatureSettingsPopup {
 
 impl AppState {
     pub fn send_config(&self) {
-        self.send_message(GameMessage(Box::new(self.config.clone())));
+        self.send_message(GameMessage::Config(Box::new(self.config.clone())));
         self.save();
     }
 
@@ -62,8 +66,163 @@ impl AppState {
         }
     }
 
+    pub fn bool_setting(&mut self, ui: &mut Ui, label: &str, id: SettingId) -> bool {
+        self.bool_setting_hover(ui, label, None, id)
+    }
+
+    pub fn bool_setting_hover(
+        &mut self,
+        ui: &mut Ui,
+        label: &str,
+        hover_text: Option<&str>,
+        id: SettingId,
+    ) -> bool {
+        let mut value = self.config.bool_value(&id);
+        let has_bind = self.config.binds.iter().any(|binding| binding.target == id);
+        let active = self
+            .data
+            .lock()
+            .bound_values
+            .get(&id)
+            .copied()
+            .unwrap_or(value);
+        let response = bool_setting_row(ui, label, &mut value, has_bind, active);
+        if let Some(text) = hover_text {
+            response.response.clone().on_hover_text(text);
+        }
+        if response.open_bind {
+            if self.bind_popup.is_none() {
+                self.send_message(GameMessage::BindCapture(true));
+            }
+            self.bind_popup = Some(id.clone());
+        }
+        if response.changed {
+            self.config.set_bool(&id, value);
+        }
+        response.changed
+    }
+
     fn save(&self) {
         write_config(&self.config, &self.current_config);
+    }
+
+    fn render_bind_popup(&mut self, ui: &mut Ui) {
+        let Some(target) = self.bind_popup.clone() else {
+            return;
+        };
+        let mut open = true;
+        let mut changed = false;
+        let mut close = false;
+        egui::Window::new("Keybinds")
+            .id(egui::Id::new("setting_bind_editor"))
+            .collapsible(false)
+            .resizable(false)
+            .default_width(330.0)
+            .open(&mut open)
+            .show(ui.ctx(), |ui| {
+                ui.label(egui::RichText::new(format!("{target:?}")).weak());
+                ui.label("Right-click a setting row to edit its binds.");
+                ui.separator();
+
+                let binding_index = self
+                    .config
+                    .binds
+                    .iter()
+                    .position(|binding| binding.target == target);
+                let Some(binding_index) = binding_index else {
+                    if ui.button("+ Add bind").clicked() {
+                        self.config.binds.push(SettingBind {
+                            target: target.clone(),
+                            mode: BindMode::Toggle,
+                            chords: vec![KeyChord::default()],
+                        });
+                        changed = true;
+                    }
+                    return;
+                };
+
+                let binding = &mut self.config.binds[binding_index];
+                ui.horizontal(|ui| {
+                    ui.label("Default mode");
+                    changed |= ui
+                        .selectable_value(&mut binding.mode, BindMode::Toggle, "Toggle")
+                        .clicked();
+                    changed |= ui
+                        .selectable_value(&mut binding.mode, BindMode::Hold, "Hold")
+                        .clicked();
+                });
+                ui.add_space(4.0);
+
+                let mut remove = None;
+                for (index, chord) in binding.chords.iter_mut().enumerate() {
+                    egui::Frame::new()
+                        .fill(ui.visuals().extreme_bg_color)
+                        .corner_radius(4.0)
+                        .inner_margin(egui::Margin::same(6))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                changed |= ui.checkbox(&mut chord.enabled, "").changed();
+                                changed |= key_chord(ui, ("setting_chord", &target, index), chord);
+                                egui::ComboBox::from_id_salt(("chord_mode", &target, index))
+                                    .selected_text(match chord.mode {
+                                        Some(mode) => format!("{mode:?}"),
+                                        None => format!("Default ({:?})", binding.mode),
+                                    })
+                                    .show_ui(ui, |ui| {
+                                        changed |= ui
+                                            .selectable_value(&mut chord.mode, None, "Default")
+                                            .clicked();
+                                        changed |= ui
+                                            .selectable_value(
+                                                &mut chord.mode,
+                                                Some(BindMode::Toggle),
+                                                "Toggle",
+                                            )
+                                            .clicked();
+                                        changed |= ui
+                                            .selectable_value(
+                                                &mut chord.mode,
+                                                Some(BindMode::Hold),
+                                                "Hold",
+                                            )
+                                            .clicked();
+                                    });
+                                if ui.small_button("×").on_hover_text("Delete bind").clicked() {
+                                    remove = Some(index);
+                                }
+                            });
+                        });
+                    ui.add_space(3.0);
+                }
+                if let Some(index) = remove {
+                    binding.chords.remove(index);
+                    changed = true;
+                }
+
+                let mut remove_binding = false;
+                ui.horizontal(|ui| {
+                    if ui.button("+ New chord").clicked() {
+                        binding.chords.push(KeyChord::default());
+                        changed = true;
+                    }
+                    if ui.button("Remove all").clicked() {
+                        remove_binding = true;
+                    }
+                });
+                if remove_binding {
+                    self.config.binds.remove(binding_index);
+                    changed = true;
+                    close = true;
+                }
+            });
+
+        if changed {
+            self.send_config();
+        }
+        if !open || close {
+            self.bind_popup = None;
+            self.send_message(GameMessage::BindCapture(false));
+        }
     }
 
     fn gui(&mut self, ui: &mut Ui) {
@@ -108,6 +267,7 @@ impl AppState {
         });
 
         self.render_text_popups(ui);
+        self.render_bind_popup(ui);
 
         if self.update_popup {
             let mut close = false;
@@ -269,7 +429,15 @@ impl App {
             return;
         }
 
-        overlay.run(move |ui| state.overlay(ui));
+        // Rendering consumes the same effective bool values as the game thread while
+        // preserving the user's saved/base config.
+        let bound_values = state.data.lock().bound_values.clone();
+        let saved_config = state.config.clone();
+        for (target, value) in &bound_values {
+            state.config.set_bool(target, *value);
+        }
+        overlay.run(|ui| state.overlay(ui));
+        state.config = saved_config;
         overlay.clear();
         overlay.paint();
 

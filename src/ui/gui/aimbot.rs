@@ -1,11 +1,11 @@
 use egui::{DragValue, Ui};
 
-use crate::ui::{
-    app::AppState,
-    drag_range::DragRange,
-    gui::helpers::{
-        bone_selector, checkbox, checkbox_hover, collapsing_open, combo_box, drag, drag_hover,
-        keybind, scroll,
+use crate::{
+    config::bind::{AimProfile, AimSetting, RcsSetting, SettingId, TriggerSetting},
+    ui::{
+        app::AppState,
+        drag_range::DragRange,
+        gui::helpers::{bone_selector, collapsing_open, combo_box, drag, drag_hover, scroll},
     },
 };
 
@@ -22,6 +22,25 @@ pub enum AimSettingsPopup {
 }
 
 impl AppState {
+    fn aim_profile(&self) -> AimProfile {
+        match self.aimbot_tab {
+            AimbotTab::Global => AimProfile::Global,
+            AimbotTab::Weapon => AimProfile::Weapon(self.aimbot_weapon.clone()),
+        }
+    }
+
+    fn aim_id(&self, setting: AimSetting) -> SettingId {
+        SettingId::Aim(self.aim_profile(), setting)
+    }
+
+    fn trigger_id(&self, setting: TriggerSetting) -> SettingId {
+        SettingId::Trigger(self.aim_profile(), setting)
+    }
+
+    fn rcs_id(&self, setting: RcsSetting) -> SettingId {
+        SettingId::Rcs(self.aim_profile(), setting)
+    }
+
     pub fn aimbot_settings(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.aimbot_tab, AimbotTab::Global, "Global");
@@ -42,32 +61,16 @@ impl AppState {
     fn aim_main(&mut self, ui: &mut Ui) {
         collapsing_open(ui, "Aim", |ui| {
             if self.aimbot_tab == AimbotTab::Weapon
-                && checkbox_hover(
+                && self.bool_setting_hover(
                     ui,
                     "Enable Override",
-                    "Enable Aim settings override for this weapon",
-                    &mut self.weapon_config().aimbot.enable_override,
+                    Some("Enable Aim settings override for this weapon"),
+                    self.aim_id(AimSetting::Override),
                 )
             {
                 self.send_config();
             }
-            if checkbox(ui, "Enable Aim", &mut self.weapon_config().aimbot.enabled) {
-                self.send_config();
-            }
-            if keybind(
-                ui,
-                "aim_hotkey",
-                "Hotkey",
-                &mut self.config.aim.aimbot_hotkey,
-            ) {
-                self.send_config();
-            }
-            if combo_box(
-                ui,
-                "aim_mode",
-                "Mode",
-                &mut self.weapon_config().aimbot.mode,
-            ) {
+            if self.bool_setting(ui, "Enable Aim", self.aim_id(AimSetting::Enabled)) {
                 self.send_config();
             }
             if combo_box(
@@ -108,35 +111,19 @@ impl AppState {
     fn trigger_main(&mut self, ui: &mut Ui) {
         collapsing_open(ui, "Triggerbot", |ui| {
             if self.aimbot_tab == AimbotTab::Weapon
-                && checkbox_hover(
+                && self.bool_setting_hover(
                     ui,
                     "Enable Override",
-                    "Enable Triggerbot settings override for this weapon",
-                    &mut self.weapon_config().triggerbot.enable_override,
+                    Some("Enable Triggerbot settings override for this weapon"),
+                    self.trigger_id(TriggerSetting::Override),
                 )
             {
                 self.send_config();
             }
-            if checkbox(
+            if self.bool_setting(
                 ui,
                 "Enable Triggerbot",
-                &mut self.weapon_config().triggerbot.enabled,
-            ) {
-                self.send_config();
-            }
-            if keybind(
-                ui,
-                "trigger_hotkey",
-                "Hotkey",
-                &mut self.config.aim.triggerbot_hotkey,
-            ) {
-                self.send_config();
-            }
-            if combo_box(
-                ui,
-                "trigger_mode",
-                "Mode",
-                &mut self.weapon_config().triggerbot.mode,
+                self.trigger_id(TriggerSetting::Enabled),
             ) {
                 self.send_config();
             }
@@ -184,10 +171,10 @@ impl AppState {
 
     fn aim_advanced(&mut self, ui: &mut Ui) {
         ui.heading("Targeting");
-        if checkbox(
+        if self.bool_setting(
             ui,
             "Target Friendlies",
-            &mut self.weapon_config().aimbot.target_friendlies,
+            self.aim_id(AimSetting::TargetFriendlies),
         ) {
             self.send_config();
         }
@@ -241,11 +228,7 @@ impl AppState {
 
         ui.separator();
         ui.heading("Humanization");
-        if checkbox(
-            ui,
-            "Enable Humanization",
-            &mut self.weapon_config().aimbot.humanize,
-        ) {
+        if self.bool_setting(ui, "Enable Humanization", self.aim_id(AimSetting::Humanize)) {
             self.send_config();
         }
         let enabled = self.weapon_config().aimbot.humanize;
@@ -271,35 +254,30 @@ impl AppState {
 
         ui.separator();
         ui.heading("Checks");
-        if checkbox(
+        if self.bool_setting(
             ui,
             "Visibility Check",
-            &mut self.weapon_config().aimbot.visibility_check,
+            self.aim_id(AimSetting::VisibilityCheck),
         ) {
             self.send_config();
         }
         let visibility = self.weapon_config().aimbot.visibility_check;
         ui.add_enabled_ui(visibility, |ui| {
-            if checkbox_hover(
+            if self.bool_setting_hover(
                 ui,
                 "Through Walls",
-                "Uses Triggerbot autowall rules and requires Triggerbot Through Walls",
-                &mut self.weapon_config().aimbot.through_walls,
+                Some("Uses Triggerbot autowall rules and requires Triggerbot Through Walls"),
+                self.aim_id(AimSetting::ThroughWalls),
             ) {
                 self.send_config();
             }
         });
-        for (label, field) in [
-            ("Smoke Check", 0_u8),
-            ("Flash Check", 1),
-            ("In-Air Check", 2),
+        for (label, setting) in [
+            ("Smoke Check", AimSetting::SmokeCheck),
+            ("Flash Check", AimSetting::FlashCheck),
+            ("In-Air Check", AimSetting::InAirCheck),
         ] {
-            let value = match field {
-                0 => &mut self.weapon_config().aimbot.smoke_check,
-                1 => &mut self.weapon_config().aimbot.flash_check,
-                _ => &mut self.weapon_config().aimbot.in_air_check,
-            };
-            if checkbox(ui, label, value) {
+            if self.bool_setting(ui, label, self.aim_id(setting)) {
                 self.send_config();
             }
         }
@@ -313,15 +291,11 @@ impl AppState {
         ui.separator();
         ui.heading("RCS");
         if self.aimbot_tab == AimbotTab::Weapon
-            && checkbox(
-                ui,
-                "Enable Override",
-                &mut self.weapon_config().rcs.enable_override,
-            )
+            && self.bool_setting(ui, "Enable Override", self.rcs_id(RcsSetting::Override))
         {
             self.send_config();
         }
-        if checkbox(ui, "Enable RCS", &mut self.weapon_config().rcs.enabled) {
+        if self.bool_setting(ui, "Enable RCS", self.rcs_id(RcsSetting::Enabled)) {
             self.send_config();
         }
         if ui
@@ -348,17 +322,13 @@ impl AppState {
 
     fn trigger_advanced(&mut self, ui: &mut Ui) {
         ui.heading("Accuracy");
-        if checkbox(
-            ui,
-            "Head Only",
-            &mut self.weapon_config().triggerbot.head_only,
-        ) {
+        if self.bool_setting(ui, "Head Only", self.trigger_id(TriggerSetting::HeadOnly)) {
             self.send_config();
         }
-        if checkbox(
+        if self.bool_setting(
             ui,
             "Prefer Center",
-            &mut self.weapon_config().triggerbot.prefer_center,
+            self.trigger_id(TriggerSetting::PreferCenter),
         ) {
             self.send_config();
         }
@@ -395,11 +365,11 @@ impl AppState {
         ) {
             self.send_config();
         }
-        if checkbox_hover(
+        if self.bool_setting_hover(
             ui,
             "Auto Stop",
-            "Counter-strafe until the weapon reaches accurate speed",
-            &mut self.weapon_config().triggerbot.autostop,
+            Some("Experimental: counter-strafe until the weapon reaches accurate speed"),
+            self.trigger_id(TriggerSetting::AutoStop),
         ) {
             self.send_config();
         }
@@ -415,45 +385,39 @@ impl AppState {
 
         ui.separator();
         ui.heading("Checks");
-        if checkbox(
+        if self.bool_setting(
             ui,
             "Visibility Check",
-            &mut self.weapon_config().triggerbot.visibility_check,
+            self.trigger_id(TriggerSetting::VisibilityCheck),
         ) {
             self.send_config();
         }
         let visibility = self.weapon_config().triggerbot.visibility_check;
         ui.add_enabled_ui(visibility, |ui| {
-            if checkbox_hover(
+            if self.bool_setting_hover(
                 ui,
                 "Through Walls",
-                "Estimate penetration damage from the map collision geometry",
-                &mut self.weapon_config().triggerbot.through_walls,
+                Some("Estimate penetration damage from the map collision geometry"),
+                self.trigger_id(TriggerSetting::ThroughWalls),
             ) {
                 self.send_config();
             }
         });
-        for (label, field) in [
-            ("Smoke Check", 0_u8),
-            ("Flash Check", 1),
-            ("Scope Check", 2),
-            ("In-Air Check", 3),
+        for (label, setting) in [
+            ("Smoke Check", TriggerSetting::SmokeCheck),
+            ("Flash Check", TriggerSetting::FlashCheck),
+            ("Scope Check", TriggerSetting::ScopeCheck),
+            ("In-Air Check", TriggerSetting::InAirCheck),
         ] {
-            let value = match field {
-                0 => &mut self.weapon_config().triggerbot.smoke_check,
-                1 => &mut self.weapon_config().triggerbot.flash_check,
-                2 => &mut self.weapon_config().triggerbot.scope_check,
-                _ => &mut self.weapon_config().triggerbot.in_air_check,
-            };
-            if checkbox(ui, label, value) {
+            if self.bool_setting(ui, label, self.trigger_id(setting)) {
                 self.send_config();
             }
         }
-        if checkbox_hover(
+        if self.bool_setting_hover(
             ui,
             "Velocity Check",
-            "Only shoot below the configured movement speed",
-            &mut self.weapon_config().triggerbot.velocity_check,
+            Some("Only shoot below the configured movement speed"),
+            self.trigger_id(TriggerSetting::VelocityCheck),
         ) {
             self.send_config();
         }

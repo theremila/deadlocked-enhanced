@@ -63,11 +63,11 @@ impl Aimbot {
 
 impl CS2 {
     pub fn aimbot(&mut self, config: &Config, mouse: &mut Mouse) -> bool {
-        let hotkey = config.aim.aimbot_hotkey;
+        let master_enabled = config.aim.global.aimbot.enabled;
         let trigger_wallbang = {
             let trigger = self.triggerbot_config(config);
             (
-                trigger.enabled && trigger.through_walls,
+                config.aim.global.triggerbot.enabled && trigger.enabled && trigger.through_walls,
                 trigger.min_damage,
                 trigger.head_only,
                 trigger.bones.clone(),
@@ -75,15 +75,12 @@ impl CS2 {
         };
         let config = self.aimbot_config(config);
 
-        if !config.enabled {
+        if !master_enabled || !config.enabled {
+            self.aim.active = false;
             self.aim.reset_tracking();
             return false;
         }
-
-        if !Self::check_hotkey(&self.input, config.mode, hotkey, &mut self.aim.active) {
-            self.aim.reset_tracking();
-            return false;
-        }
+        self.aim.active = true;
 
         let Some(target) = &self.target.player else {
             self.aim.reset_tracking();
