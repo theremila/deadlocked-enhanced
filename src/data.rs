@@ -18,7 +18,7 @@ pub enum SoundType {
     Weapon,
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Data {
     pub in_game: bool,
     pub is_ffa: bool,
@@ -61,7 +61,7 @@ pub struct PlayerData {
     pub sound: Option<SoundType>,
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct BombData {
     pub planted: bool,
     pub timer: f32,

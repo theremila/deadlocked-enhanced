@@ -126,7 +126,7 @@ impl Player {
 
     pub fn name(&self, cs2: &CS2) -> String {
         cs2.process
-            .read_string_uncached(self.controller + cs2.offsets.controller.name)
+            .read_string(self.controller + cs2.offsets.controller.name)
     }
 
     /// returns a pawn-only player
@@ -210,6 +210,19 @@ impl Player {
         Weapon::from_handle(weapon_handle, cs2).unwrap_or_default()
     }
 
+    pub fn weapon_snapshot(&self, cs2: &CS2) -> (Weapon, (i32, i32)) {
+        let Some(weapon) = self.weapon_address(cs2) else {
+            return (Weapon::Unknown, (0, 0));
+        };
+        (
+            Weapon::from_entity(weapon, cs2),
+            (
+                Weapon::clip_ammo(weapon, cs2),
+                Weapon::reserve_ammo(weapon, cs2),
+            ),
+        )
+    }
+
     pub fn all_weapons(&self, cs2: &CS2) -> Vec<Weapon> {
         let mut weapons = vec![];
         let weapon_services: usize = cs2
@@ -264,14 +277,6 @@ impl Player {
         let tick_base: i32 = cs2.process.read(self.controller + tick_base_offset);
         let next_attack: i32 = cs2.process.read(weapon + next_attack_offset);
         next_attack <= tick_base
-    }
-
-    pub fn reserve_ammo(&self, cs2: &CS2) -> i32 {
-        let Some(weapon) = self.weapon_address(cs2) else {
-            return 0;
-        };
-
-        cs2.process.read(weapon + cs2.offsets.weapon.reserve_ammo)
     }
 
     pub fn game_scene_node(&self, cs2: &CS2) -> usize {
@@ -386,16 +391,6 @@ impl Player {
             != 0
     }
 
-    pub fn color(&self, cs2: &CS2) -> i32 {
-        cs2.process
-            .read(self.controller + cs2.offsets.controller.color)
-    }
-
-    pub fn rotation(&self, cs2: &CS2) -> f32 {
-        cs2.process
-            .read(self.pawn + cs2.offsets.pawn.eye_angles + 0x04)
-    }
-
     pub fn view_angles(&self, cs2: &CS2) -> Vec2 {
         cs2.process.read(self.pawn + cs2.offsets.pawn.view_angles)
     }
@@ -506,6 +501,28 @@ impl Player {
             }
         }
         true
+    }
+
+    pub fn visible_from_bones(
+        &self,
+        cs2: &CS2,
+        local_eye: Vec3,
+        bones: &HashMap<Bones, Vec3>,
+    ) -> bool {
+        if let Some(bvh) = &cs2.bvh {
+            const CHECKED_BONES: [Bones; 2] = [
+                Bones::Head,
+                Bones::Spine2,
+            ];
+            return CHECKED_BONES.iter().any(|bone| {
+                bones
+                    .get(bone)
+                    .is_some_and(|position| bvh.has_line_of_sight(local_eye, *position))
+            });
+        }
+
+        let spotted_mask = self.spotted_mask(cs2);
+        (spotted_mask & (1 << cs2.target.local_pawn_index)) != 0
     }
 
     pub fn crosshair_entity(&self, cs2: &CS2) -> Option<Self> {

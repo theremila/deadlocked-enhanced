@@ -38,6 +38,7 @@ use crate::{
 pub struct AppState {
     pub channel: Channel<GameMessage, UiMessage>,
     pub data: Arc<Mutex<Data>>,
+    pub render_data: Data,
 
     pub game_status: GameStatus,
     pub display_scale: f32,
@@ -103,6 +104,7 @@ impl AppState {
         Self {
             channel,
             data,
+            render_data: Data::default(),
             app_config,
             config,
             current_config: CONFIG_PATH.join(DEFAULT_CONFIG_NAME),

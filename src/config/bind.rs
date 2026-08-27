@@ -197,6 +197,12 @@ impl SettingBind {
             .collect::<Vec<_>>()
             .join(" / ")
     }
+
+    pub fn has_visible_chord(&self) -> bool {
+        self.chords
+            .iter()
+            .any(|chord| chord.enabled && !chord.keys.is_empty())
+    }
 }
 
 impl SettingId {

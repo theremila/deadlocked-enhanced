@@ -20,6 +20,19 @@ pub struct Target {
     pub position: Vec3,
     pub local_pawn_index: u64,
     pub previous_aim_punch: Vec2,
+    candidates: Vec<TargetCandidate>,
+}
+
+struct TargetCandidate {
+    player: Player,
+    angle: Vec2,
+    distance: f32,
+    bone_index: u64,
+    bone: crate::cs2::bones::Bones,
+    position: Vec3,
+    metric: f32,
+    allow_penetration: bool,
+    min_damage: f32,
 }
 
 impl Target {
@@ -67,9 +80,9 @@ impl CS2 {
         }
 
         let max_fov_units = aimbot_config.fov;
-        let mut best_metric = f32::MAX;
-        let mut best_target = None;
         let eye_position = local_player.eye_position(self);
+        let mut candidates = std::mem::take(&mut self.target.candidates);
+        candidates.clear();
 
         if self.players.is_empty() {
             self.target.clear_selection();
@@ -87,6 +100,20 @@ impl CS2 {
                 continue;
             }
 
+            let player_pos = player.position(self);
+            let approx_dist = eye_position.distance(player_pos);
+            if approx_dist < 1.0 {
+                continue;
+            }
+
+            let approx_angle = self.angle_to_target(&local_player, &player_pos, &aim_punch);
+            let approx_fov = angles_to_fov(&view_angles, &approx_angle);
+            if let Some(approx_offset) = forward_ray_offset(approx_dist, approx_fov) {
+                if approx_offset > max_fov_units + 120.0 {
+                    continue;
+                }
+            }
+
             for hit in spheres(self, player, &aimbot_config.bones, false) {
                 let trigger_allows_bone = triggerbot_config.bones.contains(&hit.bone)
                     && (!triggerbot_config.head_only || hit.bone == crate::cs2::bones::Bones::Head);
@@ -96,9 +123,7 @@ impl CS2 {
                     && trigger_allows_bone;
                 let wall_min_damage =
                     triggerbot_config.min_damage.min(player.health(self)).max(1) as f32;
-                let mut bone_candidate = None;
-
-                for (point_index, point) in multipoints(hit, eye_position).into_iter().enumerate() {
+                for point in multipoints(hit, eye_position) {
                     let distance = eye_position.distance(point);
                     if distance < 1.0
                         || (aimbot_config.smoke_check && self.is_line_in_smoke(eye_position, point))
@@ -114,54 +139,48 @@ impl CS2 {
                         continue;
                     }
 
-                    let Some(path) = self.evaluate_shot_path(
-                        &local_player,
-                        player,
-                        point,
-                        hit.bone,
-                        allow_penetration,
-                        1,
-                    ) else {
-                        continue;
-                    };
-                    if path.penetrated && path.damage < wall_min_damage {
-                        continue;
-                    }
-
                     let metric = match &aimbot_config.targeting_mode {
                         TargetingMode::Fov => fov_deg,
                         TargetingMode::Distance => distance,
                     };
-                    if point_index == 0 {
-                        bone_candidate = Some((metric, angle, distance, point));
-                        break;
-                    }
-                    if bone_candidate
-                        .as_ref()
-                        .is_none_or(|(best, _, _, _)| metric < *best)
-                    {
-                        bone_candidate = Some((metric, angle, distance, point));
-                    }
-                }
-
-                let Some((metric, angle, distance, point)) = bone_candidate else {
-                    continue;
-                };
-                if metric < best_metric {
-                    best_metric = metric;
-                    best_target = Some((*player, angle, distance, hit.bone.u64(), point));
+                    candidates.push(TargetCandidate {
+                        player: *player,
+                        angle,
+                        distance,
+                        bone_index: hit.bone.u64(),
+                        bone: hit.bone,
+                        position: point,
+                        metric,
+                        allow_penetration,
+                        min_damage: wall_min_damage,
+                    });
                 }
             }
         }
 
-        if let Some((player, angle, distance, bone_index, position)) = best_target {
-            self.target.player = Some(player);
-            self.target.angle = angle;
-            self.target.distance = distance;
-            self.target.bone_index = bone_index;
-            self.target.position = position;
-        } else {
-            self.target.clear_selection();
+        candidates.sort_unstable_by(|left, right| left.metric.total_cmp(&right.metric));
+        let selected = candidates.iter().take(5).find(|candidate| {
+            self.evaluate_shot_path(
+                &local_player,
+                &candidate.player,
+                candidate.position,
+                candidate.bone,
+                candidate.allow_penetration,
+                1,
+            )
+            .is_some_and(|path| !path.penetrated || path.damage >= candidate.min_damage)
+        });
+
+        match selected {
+            Some(candidate) => {
+                self.target.player = Some(candidate.player);
+                self.target.angle = candidate.angle;
+                self.target.distance = candidate.distance;
+                self.target.bone_index = candidate.bone_index;
+                self.target.position = candidate.position;
+            }
+            None => self.target.clear_selection(),
         }
+        self.target.candidates = candidates;
     }
 }

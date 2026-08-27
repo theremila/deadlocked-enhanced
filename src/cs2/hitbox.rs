@@ -41,13 +41,17 @@ pub fn bone_radius(bone: Bones) -> f32 {
     }
 }
 
-pub fn spheres(cs2: &CS2, player: &Player, bones: &[Bones], head_only: bool) -> Vec<HitSphere> {
+pub fn spheres_from_bones(
+    all_bones: &std::collections::HashMap<Bones, Vec3>,
+    bones: &[Bones],
+    head_only: bool,
+) -> Vec<HitSphere> {
     bones
         .iter()
         .copied()
         .filter(|bone| !head_only || *bone == Bones::Head)
         .filter_map(|bone| {
-            let center = player.bone_position(cs2, bone.u64());
+            let center = all_bones.get(&bone).copied().unwrap_or(Vec3::ZERO);
             (center.is_finite() && center != Vec3::ZERO).then_some(HitSphere {
                 bone,
                 center,
@@ -55,6 +59,11 @@ pub fn spheres(cs2: &CS2, player: &Player, bones: &[Bones], head_only: bool) -> 
             })
         })
         .collect()
+}
+
+pub fn spheres(cs2: &CS2, player: &Player, bones: &[Bones], head_only: bool) -> Vec<HitSphere> {
+    let all_bones = player.all_bones(cs2);
+    spheres_from_bones(&all_bones, bones, head_only)
 }
 
 pub fn capsules(hit_spheres: &[HitSphere]) -> Vec<HitCapsule> {

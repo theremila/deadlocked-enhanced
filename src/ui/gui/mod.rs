@@ -80,8 +80,7 @@ impl AppState {
         let mut value = self.config.bool_value(&id);
         let has_bind = self.config.binds.iter().any(|binding| binding.target == id);
         let active = self
-            .data
-            .lock()
+            .render_data
             .bound_values
             .get(&id)
             .copied()
@@ -406,6 +405,8 @@ impl App {
         let overlay = self.overlay.as_mut().unwrap();
         let state = &mut self.state;
 
+        state.render_data.clone_from(&state.data.lock());
+
         if let Err(err) = gui.make_current() {
             utils::error!("could not make gui window current: {err}");
             return;
@@ -420,10 +421,7 @@ impl App {
         }
 
         overlay.window().set_cursor_hittest(false).unwrap();
-        {
-            let data_guard = state.data.lock();
-            Self::update_overlay_window(overlay, &data_guard);
-        }
+        Self::update_overlay_window(overlay, &state.render_data);
         if let Err(err) = overlay.make_current() {
             utils::error!("could not make overlay window current: {err}");
             return;
@@ -431,13 +429,21 @@ impl App {
 
         // Rendering consumes the same effective bool values as the game thread while
         // preserving the user's saved/base config.
-        let bound_values = state.data.lock().bound_values.clone();
-        let saved_config = state.config.clone();
-        for (target, value) in &bound_values {
+        let bound_overrides = state
+            .render_data
+            .bound_values
+            .iter()
+            .map(|(target, value)| (target.clone(), state.config.bool_value(target), *value))
+            .collect::<Vec<_>>();
+        for (target, _, value) in &bound_overrides {
             state.config.set_bool(target, *value);
         }
-        overlay.run(|ui| state.overlay(ui));
-        state.config = saved_config;
+        let render_data = std::mem::take(&mut state.render_data);
+        overlay.run(|ui| state.overlay(ui, &render_data));
+        state.render_data = render_data;
+        for (target, saved_value, _) in &bound_overrides {
+            state.config.set_bool(target, *saved_value);
+        }
         overlay.clear();
         overlay.paint();
 

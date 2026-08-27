@@ -68,7 +68,7 @@ impl AppState {
 
     fn record_grenade(&mut self, ui: &mut Ui) {
         collapsing_open(ui, "Add Grenade", |ui| {
-            let data = self.data.lock();
+            let data = &self.render_data;
 
             if !data.in_game {
                 ui.label("Not in game.");

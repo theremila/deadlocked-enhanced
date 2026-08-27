@@ -117,12 +117,21 @@ impl AppState {
         radius.is_finite().then_some(radius)
     }
 
-    pub fn draw_keybind_list(&self, painter: &Painter, data: &Data) {
+    pub fn draw_keybind_list(&self, painter: &Painter, data: &Data) -> f32 {
         if !self.config.hud.keybind_list {
-            return;
+            return 0.0;
         }
 
         let cat = &self.config.hud.overlay_text.keybind_list;
+        let line_height = painter
+            .layout_no_wrap(
+                "Ag".into(),
+                egui::FontId::proportional(cat.font_size),
+                cat.color,
+            )
+            .size()
+            .y
+            .max(cat.font_size);
         let position = screen_anchor(
             [data.window_size.x, data.window_size.y],
             cat.position,
@@ -133,7 +142,7 @@ impl AppState {
             .config
             .binds
             .iter()
-            .filter(|binding| !binding.chord_text().is_empty())
+            .filter(|binding| binding.has_visible_chord())
             .enumerate()
         {
             let active = data
@@ -144,25 +153,40 @@ impl AppState {
             self.text_sized(
                 painter,
                 format!("{}: {}", binding.target.label(), binding.chord_text()),
-                position + vec2(0.0, cat.font_size * index as f32),
+                position + vec2(0.0, line_height * index as f32),
                 cat.align.to_align2(),
                 if active { Color32::GREEN } else { cat.color },
                 cat.font_size,
             );
         }
+
+        let line_count = self
+            .config
+            .binds
+            .iter()
+            .filter(|binding| binding.has_visible_chord())
+            .count();
+        line_height * line_count as f32
     }
 
-    pub fn draw_spectator_list(&self, painter: &Painter, data: &Data) {
+    pub fn draw_spectator_list(&self, painter: &Painter, data: &Data, keybind_height: f32) {
         if !self.config.hud.spectator_list {
             return;
         }
 
         let cat = &self.config.hud.overlay_text.spectator_list;
+        let keybind_cat = &self.config.hud.overlay_text.keybind_list;
+        let keybind_height = if cat.position == keybind_cat.position {
+            keybind_height
+        } else {
+            0.0
+        };
+        let stacked_offset = keybind_height + if keybind_height > 0.0 { 4.0 } else { 0.0 };
         let position = screen_anchor(
             [data.window_size.x, data.window_size.y],
             cat.position,
             10.0,
-            cat.font_size * 3.0,
+            stacked_offset,
         );
         self.text_sized(
             painter,

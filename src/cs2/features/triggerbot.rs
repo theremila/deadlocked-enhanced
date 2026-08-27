@@ -92,6 +92,20 @@ impl CS2 {
 
             let required_damage = config.min_damage.min(player.health(self)).max(1) as f32;
             let is_direct_target = direct_target.is_some_and(|target| target.pawn == player.pawn);
+
+            if !is_direct_target {
+                let player_pos = player.position(self);
+                let to_player = player_pos - eye_pos;
+                let proj = to_player.dot(view_direction);
+                if proj <= 0.0 {
+                    continue;
+                }
+                let perp_dist_sq = to_player.length_squared() - proj * proj;
+                if perp_dist_sq > (60.0 + 90.0) * (60.0 + 90.0) {
+                    continue;
+                }
+            }
+
             let hit_spheres = spheres(self, player, &config.bones, config.head_only);
             let hit_capsules = capsules(&hit_spheres);
             let closest_hit = hit_spheres

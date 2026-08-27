@@ -519,9 +519,7 @@ impl AppState {
         Some((tl, br))
     }
 
-    pub fn update_player_sounds(&mut self) {
-        let data = self.data.lock();
-
+    pub fn update_player_sounds(&mut self, data: &Data) {
         for player in &data.players {
             let Some(sound) = &player.sound else {
                 continue;

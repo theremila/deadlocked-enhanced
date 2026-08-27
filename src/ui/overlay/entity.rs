@@ -164,8 +164,7 @@ impl AppState {
         }
     }
 
-    pub fn update_trails(&mut self) {
-        let data = self.data.lock();
+    pub fn update_trails(&mut self, data: &Data) {
         for entity in &data.entities {
             let (entity, position) = match entity {
                 EntityInfo::Inferno(info) => (info.entity, info.position),

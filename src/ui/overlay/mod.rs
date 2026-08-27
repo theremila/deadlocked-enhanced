@@ -23,13 +23,12 @@ impl AppState {
         &self.config.aim.global.aimbot
     }
 
-    pub fn overlay(&mut self, ui: &mut Ui) {
+    pub fn overlay(&mut self, ui: &mut Ui, data: &Data) {
         ui.ctx().set_pixels_per_point(1.0);
         let painter = ui.layer_painter(egui::LayerId::background());
 
-        self.update_trails();
-        self.update_player_sounds();
-        let data = &self.data.lock();
+        self.update_trails(data);
+        self.update_player_sounds(data);
 
         self.overlay_debug(&painter, data);
 
@@ -56,8 +55,8 @@ impl AppState {
         self.draw_bomb_timer(&painter, data);
         self.draw_fov_circle(&painter, data);
         self.draw_sniper_crosshair(&painter, data);
-        self.draw_keybind_list(&painter, data);
-        self.draw_spectator_list(&painter, data);
+        let keybind_height = self.draw_keybind_list(&painter, data);
+        self.draw_spectator_list(&painter, data, keybind_height);
         self.draw_oof_arrows(&painter, data);
         self.draw_watermark(&painter, data);
 

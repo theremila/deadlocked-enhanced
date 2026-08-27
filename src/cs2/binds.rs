@@ -106,12 +106,13 @@ impl BindRuntime {
         self.rebaseline_next = false;
     }
 
-    pub fn effective_config(&self, base: &Config) -> Config {
-        let mut effective = base.clone();
+    pub fn apply_to(&self, base: &Config, effective: &mut Config) {
+        for binding in &base.binds {
+            effective.set_bool(&binding.target, base.bool_value(&binding.target));
+        }
         for (target, value) in &self.values {
             effective.set_bool(target, *value);
         }
-        effective
     }
 
     pub fn values(&self) -> &HashMap<SettingId, bool> {

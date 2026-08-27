@@ -17,6 +17,7 @@ use crate::{
 pub struct GameManager {
     channel: Channel<UiMessage, GameMessage>,
     data: Arc<Mutex<Data>>,
+    pending_data: Data,
     config: Config,
     mouse: Mouse,
     cs2: CS2,
@@ -36,6 +37,7 @@ impl GameManager {
         Self {
             channel,
             data,
+            pending_data: Data::default(),
             config: Config::default(),
             mouse,
             cs2: CS2::new(),
@@ -81,10 +83,11 @@ impl GameManager {
                     previous_status = GameStatus::Working;
                 }
                 self.cs2.run(&self.config, &mut self.mouse);
-                let mut data = self.data.lock();
-                self.cs2.data(&mut data);
+                self.cs2.data(&mut self.pending_data);
+                std::mem::swap(&mut *self.data.lock(), &mut self.pending_data);
             } else {
-                *self.data.lock() = Data::default();
+                self.pending_data = Data::default();
+                std::mem::swap(&mut *self.data.lock(), &mut self.pending_data);
             }
 
             if is_valid {

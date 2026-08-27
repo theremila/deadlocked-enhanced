@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     path::PathBuf,
     time::{Duration, Instant},
 };
@@ -62,6 +63,9 @@ pub struct CS2 {
     last_cache: Instant,
     bind_runtime: BindRuntime,
     effective_config: Config,
+    esp_visibility: HashMap<usize, bool>,
+    esp_equipment: HashMap<usize, (bool, bool, bool)>,
+    esp_visibility_cursor: usize,
 }
 
 impl CS2 {
@@ -103,7 +107,8 @@ impl CS2 {
 
         self.input.update(&self.process, &self.offsets);
         self.bind_runtime.update(config, &self.input);
-        let effective_config = self.bind_runtime.effective_config(config);
+        let mut effective_config = std::mem::take(&mut self.effective_config);
+        self.bind_runtime.apply_to(config, &mut effective_config);
         let config = &effective_config;
 
         if self.last_cache.elapsed() > Duration::from_millis(200) {
@@ -138,7 +143,7 @@ impl CS2 {
         self.effective_config = effective_config;
     }
 
-    pub fn data(&self, data: &mut Data) {
+    pub fn data(&mut self, data: &mut Data) {
         let config = &self.effective_config;
         data.bound_values.clone_from(self.bind_runtime.values());
         data.players.clear();
@@ -176,29 +181,102 @@ impl CS2 {
         } else {
             local_player.pawn
         };
+        let local_eye = local_player.eye_position(self);
+        data.view_matrix = self.process.read::<Mat4>(self.offsets.direct.view_matrix);
+        data.view_angles = local_player.view_angles(self);
 
-        for player in &self.players {
+        let check_visibility = config.player.enabled
+            && (config.player.visible_only
+                || config.player.draw_box != crate::config::player::DrawMode::None
+                || config.player.draw_skeleton != crate::config::player::DrawMode::None
+                || config.player.head_circle);
+        let visibility_index = self.esp_visibility_cursor % self.players.len().max(1);
+        let material_visibility = self.bvh.is_some();
+        for (player_index, player) in self.players.iter().enumerate() {
             if spectator_target.is_some() && player.pawn == active_pawn {
                 continue;
             }
 
+            let bones = player.all_bones(self);
+            let head = bones
+                .get(&Bones::Head)
+                .copied()
+                .unwrap_or_else(|| player.bone_position(self, Bones::Head.u64()));
+            let visible = if check_visibility {
+                if material_visibility {
+                    if player_index == visibility_index {
+                        let visible = player.visible_from_bones(self, local_eye, &bones);
+                        self.esp_visibility.insert(player.pawn, visible);
+                        visible
+                    } else {
+                        self.esp_visibility
+                            .get(&player.pawn)
+                            .copied()
+                            .unwrap_or(false)
+                    }
+                } else {
+                    player.visible_from_bones(self, local_eye, &bones)
+                }
+            } else {
+                true
+            };
+            let sound = if config.player.sound.enabled {
+                player.is_making_sound(self)
+            } else {
+                None
+            };
+            let (weapon, ammo) = if config.player.weapon_icon {
+                player.weapon_snapshot(self)
+            } else {
+                (Weapon::Unknown, (0, 0))
+            };
+            let (has_defuser, has_helmet, has_bomb) = if config.player.tags {
+                if player_index == visibility_index {
+                    let equipment = (
+                        player.has_defuser(self),
+                        player.has_helmet(self),
+                        player.has_bomb(self),
+                    );
+                    self.esp_equipment.insert(player.pawn, equipment);
+                    equipment
+                } else {
+                    self.esp_equipment
+                        .get(&player.pawn)
+                        .copied()
+                        .unwrap_or_default()
+                }
+            } else {
+                (false, false, false)
+            };
             let player_data = PlayerData {
-                steam_id: player.steam_id(self),
+                steam_id: if config.player.sound.enabled {
+                    player.steam_id(self)
+                } else {
+                    0
+                },
                 health: player.health(self),
-                armor: player.armor(self),
+                armor: if config.player.armor_bar {
+                    player.armor(self)
+                } else {
+                    0
+                },
                 position: player.position(self),
-                head: player.bone_position(self, Bones::Head.u64()),
-                name: player.name(self),
-                weapon: player.weapon(self),
-                ammo: (player.clip_ammo(self), player.reserve_ammo(self)),
-                bones: player.all_bones(self),
-                has_defuser: player.has_defuser(self),
-                has_helmet: player.has_helmet(self),
-                has_bomb: player.has_bomb(self),
-                visible: player.visible(self, &local_player),
-                color: player.color(self),
-                rotation: player.rotation(self),
-                sound: player.is_making_sound(self),
+                head,
+                name: if config.player.player_name {
+                    player.name(self)
+                } else {
+                    String::new()
+                },
+                weapon,
+                ammo,
+                bones,
+                has_defuser,
+                has_helmet,
+                has_bomb,
+                visible,
+                color: 0,
+                rotation: 0.0,
+                sound,
             };
 
             if !is_ffa && player.team(self) == local_team {
@@ -207,6 +285,11 @@ impl CS2 {
                 data.players.push(player_data);
             }
         }
+        self.esp_visibility_cursor = self.esp_visibility_cursor.wrapping_add(1);
+        self.esp_visibility
+            .retain(|pawn, _| self.players.iter().any(|player| player.pawn == *pawn));
+        self.esp_equipment
+            .retain(|pawn, _| self.players.iter().any(|player| player.pawn == *pawn));
 
         for player in &self.dead_players {
             if let Some(target) = player.spectator_target(self)
@@ -216,26 +299,13 @@ impl CS2 {
             }
         }
 
+        let local_weapon = local_player.weapon(self);
         data.local_player = PlayerData {
-            steam_id: local_player.steam_id(self),
-            health: local_player.health(self),
-            armor: local_player.armor(self),
             position: local_player.position(self),
-            head: local_player.eye_position(self),
-            name: local_player.name(self),
-            weapon: local_player.weapon(self),
-            ammo: (
-                local_player.clip_ammo(self),
-                local_player.reserve_ammo(self),
-            ),
-            bones: local_player.all_bones(self),
-            has_defuser: local_player.has_defuser(self),
-            has_helmet: local_player.has_helmet(self),
-            has_bomb: local_player.has_bomb(self),
+            head: local_eye,
+            weapon: local_weapon,
             visible: true,
-            color: local_player.color(self),
-            rotation: local_player.rotation(self),
-            sound: None,
+            ..PlayerData::default()
         };
 
         data.entities.clear();
@@ -263,7 +333,7 @@ impl CS2 {
             });
         }
 
-        data.weapon = local_player.weapon(self);
+        data.weapon.clone_from(&data.local_player.weapon);
         data.in_game = true;
         data.is_ffa = is_ffa;
         data.map_name = self.current_map();
@@ -276,8 +346,6 @@ impl CS2 {
         );
         data.triggerbot_active = self.trigger.active;
         data.esp_active = config.player.enabled;
-        data.view_matrix = self.process.read::<Mat4>(self.offsets.direct.view_matrix);
-        data.view_angles = local_player.view_angles(self);
 
         if let Some(bomb) = &self.planted_c4 {
             data.bomb.planted = bomb.is_planted(self);
@@ -311,10 +379,14 @@ impl CS2 {
             last_cache: Instant::now(),
             bind_runtime: BindRuntime::default(),
             effective_config: Config::default(),
+            esp_visibility: HashMap::with_capacity(64),
+            esp_equipment: HashMap::with_capacity(64),
+            esp_visibility_cursor: 0,
         }
     }
 
     pub fn rebaseline_binds(&mut self, config: &Config) {
+        self.effective_config.clone_from(config);
         self.bind_runtime.rebaseline(config);
     }
 
