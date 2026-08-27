@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
 use glam::{IVec2, Mat4, Vec2, Vec3};
 
@@ -25,14 +28,16 @@ use crate::{
     data::{Data, PlayerData},
     math::{angles_from_vector, vec2_clamp},
     os::{mouse::Mouse, process::Process},
-    parser::{bvh::Bvh, read_map},
+    parser::{bvh::Bvh, read_map, take_material_bvh},
 };
 
+mod accuracy;
 pub mod bones;
 pub mod bvh;
 pub mod entity;
 mod features;
 mod find_offsets;
+mod hitbox;
 mod input;
 pub mod key_codes;
 mod offsets;
@@ -61,6 +66,10 @@ pub struct CS2 {
 }
 
 impl CS2 {
+    pub(crate) fn executable_path(&self) -> Option<PathBuf> {
+        self.process.executable_path()
+    }
+
     pub fn is_valid(&self) -> bool {
         self.is_valid && self.process.is_valid()
     }
@@ -119,13 +128,11 @@ impl CS2 {
 
         self.esp_toggle(config);
 
-        self.triggerbot(config, mouse);
-
-        self.triggerbot_shoot(mouse);
-
         self.find_target(config);
-
-        if !self.aimbot(config, mouse) {
+        let aiming = self.aimbot(config, mouse);
+        self.triggerbot(config, mouse);
+        self.release_trigger_shot(mouse);
+        if !aiming {
             self.rcs(config, mouse);
         }
     }
@@ -262,10 +269,12 @@ impl CS2 {
         } else {
             false
         };
-        data.aim_target_position = self.target.player.as_ref().and_then(|player| {
-            let position = player.bone_position(self, self.target.bone_index);
-            position.is_finite().then_some(position)
-        });
+        data.aim_target_position = self.target.player.as_ref().and(
+            self.target
+                .position
+                .is_finite()
+                .then_some(self.target.position),
+        );
         data.triggerbot_active = if self.triggerbot_config(config).mode == KeyMode::Toggle {
             self.trigger.active
         } else {
@@ -388,53 +397,109 @@ impl CS2 {
         start: Vec3,
         end: Vec3,
         target_bone: Bones,
-        has_armor: bool,
+        armor: i32,
+        has_helmet: bool,
     ) -> f32 {
-        let base_damage = self.weapon.base_damage();
-        let headshot_mult = self.weapon.headshot_multiplier();
-        let armor_ratio = self.weapon.armor_ratio();
-        let pen_power = self.weapon.penetration_power();
+        let mut damage = self.base_hit_damage(start.distance(end), target_bone);
 
-        // 1. Hitgroup damage scaling
-        let hitgroup_damage = match target_bone {
-            Bones::Head => base_damage * headshot_mult,
-            Bones::Spine1 | Bones::Spine2 | Bones::Spine3 | Bones::Hip => base_damage * 1.25,
-            Bones::LeftFoot | Bones::RightFoot | Bones::LeftHand | Bones::RightHand => {
-                base_damage * 0.75
-            }
-            _ => base_damage,
-        };
-
-        // 2. Armor reduction
-        let scaled_damage = if has_armor && target_bone != Bones::LeftFoot && target_bone != Bones::RightFoot {
-            hitgroup_damage * (armor_ratio * 0.5)
-        } else {
-            hitgroup_damage
-        };
-
-        // 3. Line of sight / Wall penetration scaling
         if let Some(bvh) = &self.bvh {
-            if bvh.has_line_of_sight(start, end) {
-                scaled_damage
-            } else {
-                let pen_factor = (pen_power / 2.5).clamp(0.2, 1.0) * 0.65;
-                scaled_damage * pen_factor
+            let intersections = bvh.segment_intersections(start, end);
+            if !intersections.len().is_multiple_of(2) {
+                return 0.0;
             }
-        } else {
-            scaled_damage
+            let penetration_count = intersections.len().div_ceil(2);
+            if penetration_count > 4 {
+                return 0.0;
+            }
+
+            if penetration_count > 0 {
+                let penetration = self.weapon.penetration_power().max(0.1);
+                let mut effective_thickness = 0.0;
+                let mut material_retention = 1.0;
+                for pair in intersections.chunks_exact(2) {
+                    if !pair[0].2 || pair[1].2 {
+                        return 0.0;
+                    }
+                    let thickness = (pair[1].0 - pair[0].0).max(0.0);
+                    if thickness < 0.5 {
+                        return 0.0;
+                    }
+                    let material_modifier =
+                        (pair[0].1.penetration_modifier() + pair[1].1.penetration_modifier()) * 0.5;
+                    if thickness > penetration * 24.0 * material_modifier {
+                        return 0.0;
+                    }
+                    effective_thickness += thickness / material_modifier;
+                    material_retention *= (0.72 + material_modifier * 0.06).clamp(0.7, 0.95);
+                }
+                let thickness_modifier = (-effective_thickness / (penetration * 64.0)).exp();
+                let surface_modifier = (0.78 + penetration * 0.04)
+                    .clamp(0.25, 0.9)
+                    .powi(penetration_count as i32);
+                damage = damage * thickness_modifier * surface_modifier * material_retention
+                    - penetration_count as f32 * (3.0 / penetration);
+            }
         }
+
+        self.apply_armor(damage, target_bone, armor, has_helmet)
     }
 
-    pub fn can_penetrate_wall(
+    fn base_hit_damage(&self, distance: f32, target_bone: Bones) -> f32 {
+        let damage =
+            self.weapon.base_damage() * self.weapon.range_modifier().powf(distance / 500.0);
+        damage
+            * match target_bone {
+                Bones::Head => self.weapon.headshot_multiplier(),
+                Bones::Hip => 1.25,
+                Bones::LeftHip
+                | Bones::RightHip
+                | Bones::LeftKnee
+                | Bones::RightKnee
+                | Bones::LeftFoot
+                | Bones::RightFoot => 0.75,
+                _ => 1.0,
+            }
+    }
+
+    fn apply_armor(
+        &self,
+        mut damage: f32,
+        target_bone: Bones,
+        armor: i32,
+        has_helmet: bool,
+    ) -> f32 {
+        let armored_hitgroup = match target_bone {
+            Bones::Head => has_helmet,
+            Bones::LeftHip
+            | Bones::RightHip
+            | Bones::LeftKnee
+            | Bones::RightKnee
+            | Bones::LeftFoot
+            | Bones::RightFoot => false,
+            _ => armor > 0,
+        };
+        if armored_hitgroup {
+            let damage_to_health = damage * (self.weapon.armor_ratio() * 0.5);
+            let damage_to_armor = (damage - damage_to_health) * 0.5;
+            damage = if damage_to_armor > armor as f32 {
+                damage - armor as f32 * 2.0
+            } else {
+                damage_to_health
+            };
+        }
+        damage.max(0.0)
+    }
+
+    pub fn calculate_direct_damage(
         &self,
         start: Vec3,
         end: Vec3,
         target_bone: Bones,
-        has_armor: bool,
-        min_damage: i32,
-    ) -> bool {
-        let damage = self.calculate_damage(start, end, target_bone, has_armor);
-        damage >= min_damage as f32
+        armor: i32,
+        has_helmet: bool,
+    ) -> f32 {
+        let damage = self.base_hit_damage(start.distance(end), target_bone);
+        self.apply_armor(damage, target_bone, armor, has_helmet)
     }
 
     fn current_time(&self) -> f32 {
@@ -459,8 +524,12 @@ impl CS2 {
 
     fn check_bvh(&mut self) {
         let current_map = self.current_map();
+        if let Some(material_bvh) = take_material_bvh(&current_map) {
+            self.bvh = Some(material_bvh);
+            utils::info!("activated material-aware BVH for {current_map}");
+        }
         if current_map != self.current_bvh {
-            self.bvh = read_map(self);
+            self.bvh = read_map(self, &current_map);
             if self.bvh.is_some() {
                 utils::info!("loaded bvh for {current_map}");
                 self.current_bvh = current_map;

@@ -280,25 +280,76 @@ impl Weapon {
         use Weapon::*;
         match self {
             Awp | Ssg08 | G3SG1 | Scar20 => 2.5,
-            Ak47 | M4A4 | M4A1 | Aug | Sg556 | Galilar | Famas | Deagle | Revolver | Negev | M249 => 2.0,
+            Ak47 | M4A4 | M4A1 | Aug | Sg556 | Galilar | Famas | Deagle | Revolver | Negev
+            | M249 => 2.0,
             _ => 1.0,
         }
     }
 
-    pub fn headshot_multiplier(&self) -> f32 {
-        if *self == Weapon::Taser {
-            1.0
-        } else {
-            4.0
+    pub fn range_modifier(&self) -> f32 {
+        use Weapon::*;
+        match self {
+            Awp | Ssg08 | G3SG1 | Scar20 => 0.99,
+            Ak47 | M4A4 | M4A1 | Aug | Sg556 | Galilar | Famas => 0.98,
+            Deagle | Revolver | Negev | M249 => 0.81,
+            Usp | P2000 | P250 | FiveSeven | Glock | Tec9 | Cz75A | DualBerettas => 0.80,
+            Mp9 | Mac10 | Mp7 | Mp5Sd | Ump45 | P90 | Bizon => 0.84,
+            Mag7 | Nova | Sawedoff | Xm1014 => 0.70,
+            _ => 0.98,
         }
+    }
+
+    pub fn max_speed(&self, scoped: bool) -> f32 {
+        use Weapon::*;
+        match self {
+            Awp => {
+                if scoped {
+                    100.0
+                } else {
+                    200.0
+                }
+            }
+            Ssg08 => 230.0,
+            G3SG1 | Scar20 => {
+                if scoped {
+                    150.0
+                } else {
+                    215.0
+                }
+            }
+            Negev | M249 => 150.0,
+            _ => 240.0,
+        }
+    }
+
+    pub fn headshot_multiplier(&self) -> f32 {
+        if *self == Weapon::Taser { 1.0 } else { 4.0 }
     }
 
     pub fn base_inaccuracy(&self, is_scoped: bool) -> f32 {
         use Weapon::*;
         match self {
-            Awp => if is_scoped { 0.0015 } else { 0.08 },
-            Ssg08 => if is_scoped { 0.002 } else { 0.04 },
-            G3SG1 | Scar20 => if is_scoped { 0.002 } else { 0.06 },
+            Awp => {
+                if is_scoped {
+                    0.0015
+                } else {
+                    0.08
+                }
+            }
+            Ssg08 => {
+                if is_scoped {
+                    0.002
+                } else {
+                    0.04
+                }
+            }
+            G3SG1 | Scar20 => {
+                if is_scoped {
+                    0.002
+                } else {
+                    0.06
+                }
+            }
             Deagle | Revolver => 0.006,
             Ak47 | M4A4 | M4A1 | Aug | Sg556 => 0.0045,
             Usp | P2000 | P250 | FiveSeven | Glock => 0.007,
@@ -306,6 +357,17 @@ impl Weapon {
             Negev | M249 => 0.012,
             Mag7 | Nova | Sawedoff | Xm1014 => 0.030,
             _ => 0.008,
+        }
+    }
+
+    pub fn base_spread(&self) -> f32 {
+        use Weapon::*;
+        match self {
+            Mag7 | Nova | Sawedoff | Xm1014 => 0.055,
+            Negev | M249 => 0.018,
+            Mp9 | Mac10 | Mp7 | Mp5Sd | Ump45 | P90 | Bizon => 0.012,
+            Deagle | Revolver => 0.008,
+            _ => 0.006,
         }
     }
 }

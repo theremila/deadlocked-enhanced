@@ -98,6 +98,7 @@ const KEY_D: u16 = 32;
 pub struct Mouse {
     file: File,
     fractional: Vec2,
+    counter_strafe_keys: [bool; 4],
 }
 
 static CREATED: AtomicBool = AtomicBool::new(false);
@@ -136,6 +137,7 @@ impl Mouse {
         Ok(Self {
             file,
             fractional: Vec2::ZERO,
+            counter_strafe_keys: [false; 4],
         })
     }
 
@@ -237,22 +239,27 @@ impl Mouse {
         self.key(KEY_SPACE, 0);
     }
 
-    pub fn counter_strafe(&mut self, forward_vel: f32, side_vel: f32) {
-        if forward_vel > 20.0 {
-            self.key(KEY_S, 1);
-            self.key(KEY_S, 0);
-        } else if forward_vel < -20.0 {
-            self.key(KEY_W, 1);
-            self.key(KEY_W, 0);
-        }
+    pub fn counter_strafe(&mut self, forward_vel: f32, side_vel: f32, threshold: f32) {
+        self.set_counter_strafe_keys([
+            forward_vel < -threshold,
+            side_vel > threshold,
+            forward_vel > threshold,
+            side_vel < -threshold,
+        ]);
+    }
 
-        if side_vel > 20.0 {
-            self.key(KEY_D, 1);
-            self.key(KEY_D, 0);
-        } else if side_vel < -20.0 {
-            self.key(KEY_A, 1);
-            self.key(KEY_A, 0);
+    pub fn release_counter_strafe(&mut self) {
+        self.set_counter_strafe_keys([false; 4]);
+    }
+
+    fn set_counter_strafe_keys(&mut self, next: [bool; 4]) {
+        const KEYS: [u16; 4] = [KEY_W, KEY_A, KEY_S, KEY_D];
+        for index in 0..KEYS.len() {
+            if self.counter_strafe_keys[index] != next[index] {
+                self.key(KEYS[index], i32::from(next[index]));
+            }
         }
+        self.counter_strafe_keys = next;
     }
 
     fn key(&mut self, code: u16, pressed: i32) {
@@ -283,6 +290,7 @@ impl Mouse {
 
 impl Drop for Mouse {
     fn drop(&mut self) {
+        self.release_counter_strafe();
         let _ = unsafe { ui_dev_destroy(self.file.as_raw_fd()) };
         CREATED.store(false, Ordering::Relaxed);
     }

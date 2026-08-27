@@ -192,7 +192,7 @@ impl Player {
         )
     }
 
-    fn weapon_address(&self, cs2: &CS2) -> Option<usize> {
+    pub(crate) fn weapon_address(&self, cs2: &CS2) -> Option<usize> {
         let handle = self.weapon_handle(cs2)?;
         if handle == 0 {
             return None;
@@ -248,6 +248,22 @@ impl Player {
         };
 
         cs2.process.read(weapon + cs2.offsets.weapon.clip_primary)
+    }
+
+    pub fn weapon_ready(&self, cs2: &CS2) -> bool {
+        if self.clip_ammo(cs2) <= 0 {
+            return false;
+        }
+        let (Some(tick_base_offset), Some(next_attack_offset), Some(weapon)) = (
+            cs2.offsets.controller.tick_base,
+            cs2.offsets.weapon.next_primary_attack_tick,
+            self.weapon_address(cs2),
+        ) else {
+            return true;
+        };
+        let tick_base: i32 = cs2.process.read(self.controller + tick_base_offset);
+        let next_attack: i32 = cs2.process.read(weapon + next_attack_offset);
+        next_attack <= tick_base
     }
 
     pub fn reserve_ammo(&self, cs2: &CS2) -> i32 {
@@ -496,19 +512,12 @@ impl Player {
         let index: i32 = cs2
             .process
             .read(self.pawn + cs2.offsets.pawn.crosshair_entity);
-        if index == -1 {
+        if index < 0 {
             return None;
         }
 
-        let entity = Player::get_client_entity(cs2, index as usize)?;
-        let player = Player {
-            controller: 0,
-            pawn: entity,
-        };
-        if !player.is_valid(cs2) {
-            return None;
-        }
-        Some(player)
+        let player = Self::pawn(Self::get_client_entity(cs2, index as usize)?);
+        player.is_valid(cs2).then_some(player)
     }
 
     pub fn velocity(&self, cs2: &CS2) -> Vec3 {

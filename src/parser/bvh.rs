@@ -1,7 +1,66 @@
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
+use std::{
+    fs::File,
+    io::{Read as _, Write as _},
+};
 
 const MAX_LEAF_COUNT: usize = 8;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Surface {
+    #[default]
+    Unknown,
+    Concrete,
+    Metal,
+    Wood,
+    Glass,
+    Grate,
+    Plastic,
+    Cardboard,
+    Dirt,
+    Tile,
+}
+
+impl Surface {
+    pub fn from_name(name: &str) -> Self {
+        let name = name.to_ascii_lowercase();
+        if name.contains("glass") {
+            Self::Glass
+        } else if name.contains("grate") || name.contains("chainlink") {
+            Self::Grate
+        } else if name.contains("wood") {
+            Self::Wood
+        } else if name.contains("cardboard") {
+            Self::Cardboard
+        } else if name.contains("plastic") || name.contains("rubber") {
+            Self::Plastic
+        } else if name.contains("metal") || name.contains("computer") {
+            Self::Metal
+        } else if name.contains("concrete") || name.contains("rock") {
+            Self::Concrete
+        } else if name.contains("dirt") || name.contains("sand") || name.contains("gravel") {
+            Self::Dirt
+        } else if name.contains("tile") || name.contains("pottery") {
+            Self::Tile
+        } else {
+            Self::Unknown
+        }
+    }
+
+    pub fn penetration_modifier(self) -> f32 {
+        match self {
+            Self::Glass | Self::Grate => 3.0,
+            Self::Wood | Self::Cardboard => 3.0,
+            Self::Plastic => 2.0,
+            Self::Dirt => 1.5,
+            Self::Tile => 0.65,
+            Self::Metal => 0.5,
+            Self::Concrete => 0.4,
+            Self::Unknown => 0.5,
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -72,6 +131,7 @@ pub struct Triangle {
     pub v0: Vec3,
     pub v1: Vec3,
     pub v2: Vec3,
+    pub surface: Surface,
 }
 
 impl Triangle {
@@ -147,6 +207,18 @@ impl Bvh {
 
     pub fn set(&mut self, triangles: Vec<Triangle>) {
         self.triangles = triangles;
+    }
+
+    pub fn save(&self, path: &std::path::Path) -> Option<()> {
+        let encoded = postcard::to_stdvec(self).ok()?;
+        let mut file = File::create(path).ok()?;
+        file.write_all(&encoded).ok()
+    }
+
+    pub fn load(path: &std::path::Path) -> Option<Self> {
+        let mut encoded = Vec::new();
+        File::open(path).ok()?.read_to_end(&mut encoded).ok()?;
+        postcard::from_bytes(&encoded).ok()
     }
 
     #[allow(unused)]
@@ -250,6 +322,81 @@ impl Bvh {
             !self.segment_intersect_node(root, start, dir_norm, inv_dir, distance)
         } else {
             true
+        }
+    }
+
+    pub fn segment_intersections(&self, start: Vec3, end: Vec3) -> Vec<(f32, Surface, bool)> {
+        let segment = end - start;
+        let distance = segment.length();
+        let Some(root) = self.root else {
+            return Vec::new();
+        };
+        if distance <= f32::EPSILON {
+            return Vec::new();
+        }
+
+        let direction = segment / distance;
+        let inv_direction = 1.0 / direction;
+        let mut intersections = Vec::new();
+        self.collect_segment_intersections(
+            root,
+            start,
+            direction,
+            inv_direction,
+            distance,
+            &mut intersections,
+        );
+        intersections.sort_by(|left, right| left.0.total_cmp(&right.0));
+        intersections.dedup_by(|left, right| (left.0 - right.0).abs() < 0.25 && left.2 == right.2);
+        intersections
+    }
+
+    fn collect_segment_intersections(
+        &self,
+        node_idx: usize,
+        origin: Vec3,
+        direction: Vec3,
+        inv_direction: Vec3,
+        max_t: f32,
+        intersections: &mut Vec<(f32, Surface, bool)>,
+    ) {
+        let node = &self.nodes[node_idx];
+        if !node.aabb().ray_intersect(origin, inv_direction, max_t) {
+            return;
+        }
+
+        match node {
+            BvhNode::Leaf { primitives, .. } => {
+                for &idx in primitives {
+                    if let Some((t, _, _)) = self.triangles[idx].ray_intersect(origin, direction)
+                        && t > 0.25
+                        && t < max_t - 0.25
+                    {
+                        let triangle = &self.triangles[idx];
+                        let normal = (triangle.v1 - triangle.v0).cross(triangle.v2 - triangle.v0);
+                        let entering = normal.dot(direction) < 0.0;
+                        intersections.push((t, triangle.surface, entering));
+                    }
+                }
+            }
+            BvhNode::Branch { left, right, .. } => {
+                self.collect_segment_intersections(
+                    *left,
+                    origin,
+                    direction,
+                    inv_direction,
+                    max_t,
+                    intersections,
+                );
+                self.collect_segment_intersections(
+                    *right,
+                    origin,
+                    direction,
+                    inv_direction,
+                    max_t,
+                    intersections,
+                );
+            }
         }
     }
 
@@ -374,5 +521,31 @@ impl BvhNode {
             BvhNode::Branch { aabb, .. } => aabb,
             BvhNode::Leaf { aabb, .. } => aabb,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn plane(x: f32) -> Triangle {
+        Triangle {
+            v0: Vec3::new(x, -10.0, -10.0),
+            v1: Vec3::new(x, 10.0, -10.0),
+            v2: Vec3::new(x, 0.0, 10.0),
+            surface: Surface::Wood,
+        }
+    }
+
+    #[test]
+    fn segment_intersections_are_sorted_by_distance() {
+        let mut bvh = Bvh::new();
+        bvh.set(vec![plane(20.0), plane(10.0)]);
+        bvh.build();
+
+        assert_eq!(
+            bvh.segment_intersections(Vec3::ZERO, Vec3::new(30.0, 0.0, 0.0)),
+            vec![(10.0, Surface::Wood, false), (20.0, Surface::Wood, false)]
+        );
     }
 }

@@ -22,6 +22,10 @@ pub struct Process {
 }
 
 impl Process {
+    pub fn executable_path(&self) -> Option<PathBuf> {
+        read_link(self.path.join("exe")).ok()
+    }
+
     pub fn new(pid: i32) -> Self {
         if pid == -1 {
             return Self {
