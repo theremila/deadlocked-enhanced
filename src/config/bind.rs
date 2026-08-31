@@ -1,9 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    config::aim::KeyMode,
-    cs2::{entity::weapon::Weapon, key_codes::KeyCode},
-};
+use crate::cs2::{entity::weapon::Weapon, key_codes::KeyCode};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -32,6 +29,7 @@ pub enum AimSetting {
 pub enum TriggerSetting {
     Override,
     Enabled,
+    PreferAimTarget,
     AutoStop,
     VisibilityCheck,
     ThroughWalls,
@@ -115,15 +113,6 @@ pub enum SettingId {
 pub enum BindMode {
     Toggle,
     Hold,
-}
-
-impl From<KeyMode> for BindMode {
-    fn from(value: KeyMode) -> Self {
-        match value {
-            KeyMode::Toggle => Self::Toggle,
-            KeyMode::Hold => Self::Hold,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -248,14 +237,12 @@ mod tests {
     }
 
     #[test]
-    fn missing_bindings_are_available_for_legacy_migration() {
+    fn missing_bindings_use_current_defaults() {
         let config = Config::default();
         let mut value = toml::Value::try_from(config).expect("serialize config value");
         value.as_table_mut().expect("config table").remove("binds");
-        let mut parsed: Config = value.try_into().expect("deserialize legacy config");
-        assert!(parsed.binds.is_empty());
+        let parsed: Config = value.try_into().expect("deserialize config");
 
-        parsed.ensure_legacy_binds();
         assert_eq!(parsed.binds.len(), 4);
     }
 }

@@ -82,7 +82,7 @@ impl AppState {
                 let cat = &self.config.hud.overlay_text.status_text;
                 self.text_sized(
                     &painter,
-                    "trigger active",
+                    data.triggerbot_status.label(),
                     hud::screen_anchor(
                         [data.window_size.x, data.window_size.y],
                         cat.position,

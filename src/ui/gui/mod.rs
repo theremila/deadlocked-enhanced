@@ -313,6 +313,14 @@ impl AppState {
         }
     }
 
+    fn weapon_config_ref(&self) -> &WeaponConfig {
+        if self.aimbot_tab == AimbotTab::Weapon {
+            self.config.aim.weapons.get(&self.aimbot_weapon).unwrap()
+        } else {
+            &self.config.aim.global
+        }
+    }
+
     fn render_text_popups(&mut self, ui: &mut Ui) {
         let text = &mut self.config.hud.overlay_text;
         let mut changed = false;

@@ -4,7 +4,7 @@ use glam::Vec2;
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
 
-use crate::cs2::{bones::Bones, entity::weapon::Weapon, key_codes::KeyCode};
+use crate::cs2::{bones::Bones, entity::weapon::Weapon};
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -33,8 +33,6 @@ impl WeaponConfig {
 pub struct AimbotConfig {
     pub enable_override: bool,
     pub enabled: bool,
-    #[serde(skip_serializing)]
-    pub mode: KeyMode,
     pub target_friendlies: bool,
     pub distance_adjusted_fov: bool,
     pub start_bullet: i32,
@@ -62,7 +60,6 @@ impl Default for AimbotConfig {
         Self {
             enable_override: false,
             enabled: true,
-            mode: KeyMode::Hold,
             target_friendlies: false,
             distance_adjusted_fov: true,
             start_bullet: 0,
@@ -113,16 +110,34 @@ impl Default for RcsConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, EnumIter)]
-pub enum KeyMode {
-    Hold,
-    Toggle,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, EnumIter)]
 pub enum TargetingMode {
     Fov,
     Distance,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, EnumIter)]
+pub enum TriggerTargetingMode {
+    Fov,
+    Raycast,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, EnumIter)]
+pub enum SeedMode {
+    #[default]
+    Off,
+    Always,
+    WhenAvailable,
+}
+
+impl SeedMode {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Off => "Off",
+            Self::Always => "Always",
+            Self::WhenAvailable => "When Available",
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -132,9 +147,11 @@ pub struct TriggerbotConfig {
     pub enabled: bool,
     pub delay: RangeInclusive<u64>,
     pub shot_duration: u64,
-    #[serde(skip_serializing)]
-    pub mode: KeyMode,
     pub hitchance: f32,
+    pub seed_mode: SeedMode,
+    pub targeting_mode: TriggerTargetingMode,
+    pub fov: f32,
+    pub prefer_aim_target: bool,
     pub min_damage: i32,
     pub autostop: bool,
     pub visibility_check: bool,
@@ -158,8 +175,11 @@ impl Default for TriggerbotConfig {
             enabled: false,
             delay: 100..=200,
             shot_duration: 200,
-            mode: KeyMode::Hold,
             hitchance: 50.0,
+            seed_mode: SeedMode::Off,
+            targeting_mode: TriggerTargetingMode::Raycast,
+            fov: 25.0,
+            prefer_aim_target: true,
             min_damage: 20,
             autostop: false,
             visibility_check: true,
@@ -189,10 +209,6 @@ impl Default for TriggerbotConfig {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AimConfig {
-    #[serde(skip_serializing)]
-    pub aimbot_hotkey: KeyCode,
-    #[serde(skip_serializing)]
-    pub triggerbot_hotkey: KeyCode,
     pub global: WeaponConfig,
     pub weapons: HashMap<Weapon, WeaponConfig>,
 }
@@ -205,8 +221,6 @@ impl Default for AimConfig {
         }
 
         Self {
-            aimbot_hotkey: KeyCode::Mouse5,
-            triggerbot_hotkey: KeyCode::Mouse4,
             global: WeaponConfig::enabled(true),
             weapons,
         }

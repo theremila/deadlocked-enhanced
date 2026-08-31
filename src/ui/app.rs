@@ -61,6 +61,7 @@ pub struct AppState {
     pub current_tab: Tab,
     pub aimbot_tab: AimbotTab,
     pub aimbot_weapon: Weapon,
+    pub aim_profile_clipboard: Option<crate::config::aim::WeaponConfig>,
     pub aim_settings_popup: Option<AimSettingsPopup>,
     pub feature_settings_popup: Option<FeatureSettingsPopup>,
 
@@ -127,6 +128,7 @@ impl AppState {
             current_tab: Tab::Aimbot,
             aimbot_tab: AimbotTab::Global,
             aimbot_weapon: Weapon::Ak47,
+            aim_profile_clipboard: None,
             aim_settings_popup: None,
             feature_settings_popup: None,
             update_status,

@@ -4,6 +4,7 @@ use glam::{Vec2, vec2};
 
 use crate::{
     config::Config,
+    constants::timing,
     cs2::{
         CS2,
         bones::Bones,
@@ -22,11 +23,18 @@ pub struct Aimbot {
     initial_fov: f32,
     curve_direction: f32,
     smooth_random_factor: f32,
+    last_motion_update: Option<Instant>,
+    pending_view_update: Option<Vec2>,
 }
 
 impl Aimbot {
-    fn reset_tracking(&mut self) {
+    fn pause_motion(&mut self) {
         self.inertia = Vec2::ZERO;
+        self.last_motion_update = None;
+    }
+
+    fn reset_tracking(&mut self) {
+        self.pause_motion();
         self.current_target_pawn = None;
         self.target_acquired_time = None;
         self.initial_fov = 0.0;
@@ -37,6 +45,7 @@ impl Aimbot {
             return;
         }
 
+        self.pause_motion();
         self.current_target_pawn = Some(pawn);
         self.target_acquired_time = Some(Instant::now());
         self.initial_fov = current_fov.max(0.1);
@@ -44,7 +53,7 @@ impl Aimbot {
         self.smooth_random_factor = rand::random();
     }
 
-    fn smooth_delta(&mut self, target: Vec2, alpha: f32) -> Vec2 {
+    fn smooth_velocity(&mut self, target: Vec2, alpha: f32) -> Vec2 {
         for axis in 0..2 {
             let target_axis = target[axis];
             let inertia_axis = &mut self.inertia[axis];
@@ -59,6 +68,50 @@ impl Aimbot {
 
         self.inertia
     }
+
+    fn motion_timestep(&mut self, now: Instant) -> Duration {
+        let elapsed = self
+            .last_motion_update
+            .replace(now)
+            .map_or(timing::AIM_REFERENCE_INTERVAL, |last| {
+                now.saturating_duration_since(last)
+            });
+        elapsed.min(timing::AIM_MAX_TIMESTEP)
+    }
+
+    pub(crate) fn seed_angles_applied(&mut self, current: Vec2) -> bool {
+        let Some(previous) = self.pending_view_update else {
+            return true;
+        };
+        if current == previous {
+            return false;
+        }
+        self.pending_view_update = None;
+        false
+    }
+}
+
+fn time_scaled_alpha(reference_alpha: f32, step_ratio: f32) -> f32 {
+    let alpha = reference_alpha.clamp(0.0, 1.0);
+    if alpha == 0.0 || step_ratio <= 0.0 {
+        return 0.0;
+    }
+    if alpha == 1.0 {
+        return 1.0;
+    }
+
+    -(((-alpha).ln_1p() * step_ratio).exp_m1())
+}
+
+fn clamp_motion_to_remaining(mut motion: Vec2, remaining: Vec2) -> Vec2 {
+    for axis in 0..2 {
+        if motion[axis].signum() != remaining[axis].signum() {
+            motion[axis] = 0.0;
+        } else {
+            motion[axis] = motion[axis].clamp(-remaining[axis].abs(), remaining[axis].abs());
+        }
+    }
+    motion
 }
 
 impl CS2 {
@@ -107,10 +160,12 @@ impl CS2 {
         }
 
         if config.flash_check && local_player.is_flashed(self) {
+            self.aim.pause_motion();
             return false;
         }
 
         if config.in_air_check && local_player.is_in_air(self) {
+            self.aim.pause_motion();
             return false;
         }
 
@@ -126,6 +181,7 @@ impl CS2 {
         if !target_point.is_finite()
             || (config.smoke_check && self.is_line_in_smoke(eye_pos, target_point))
         {
+            self.aim.pause_motion();
             return false;
         }
 
@@ -140,14 +196,17 @@ impl CS2 {
             allow_penetration,
             1,
         ) else {
+            self.aim.pause_motion();
             return false;
         };
         let min_damage = trigger_wallbang.1.min(target.health(self)).max(1) as f32;
         if path.penetrated && path.damage < min_damage {
+            self.aim.pause_motion();
             return false;
         }
 
         if local_player.shots_fired(self) < config.start_bullet {
+            self.aim.pause_motion();
             return false;
         }
 
@@ -171,7 +230,7 @@ impl CS2 {
         }
 
         if config.deadzone > 0.0 && offset_units <= config.deadzone {
-            self.aim.inertia *= 0.5;
+            self.aim.pause_motion();
             return false;
         }
 
@@ -181,6 +240,7 @@ impl CS2 {
             .target_acquired_time
             .map_or(Duration::ZERO, |acquired| acquired.elapsed());
         if tracking_time < Duration::from_millis(config.reaction_time) {
+            self.aim.pause_motion();
             return true;
         }
 
@@ -238,13 +298,28 @@ impl CS2 {
         };
         let sensitivity = (self.get_sensitivity() * fov_mult).max(0.01);
 
-        let mouse_angles = vec2(
+        let remaining_mouse_delta = vec2(
             aim_angles.y / sensitivity * 45.45,
             -aim_angles.x / sensitivity * 45.45,
-        ) / effective_smooth;
+        );
 
-        let alpha = 1.0 - config.inertia.clamp(0.0, 1.0) * 0.5;
-        mouse.move_rel(self.aim.smooth_delta(mouse_angles, alpha));
+        let timestep = self.aim.motion_timestep(Instant::now());
+        let timestep_seconds = timestep.as_secs_f32().max(f32::EPSILON);
+        let step_ratio = timestep.as_secs_f32()
+            / timing::AIM_REFERENCE_INTERVAL
+                .as_secs_f32()
+                .max(f32::EPSILON);
+
+        let reference_fraction = 1.0 / effective_smooth;
+        let movement_fraction = time_scaled_alpha(reference_fraction, step_ratio);
+        let desired_velocity = remaining_mouse_delta * movement_fraction / timestep_seconds;
+
+        let reference_inertia_alpha = 1.0 - config.inertia.clamp(0.0, 1.0) * 0.5;
+        let inertia_alpha = time_scaled_alpha(reference_inertia_alpha, step_ratio);
+        let motion = self.aim.smooth_velocity(desired_velocity, inertia_alpha) * timestep_seconds;
+        if mouse.move_rel(clamp_motion_to_remaining(motion, remaining_mouse_delta)) {
+            self.aim.pending_view_update = Some(view_angles);
+        }
 
         self.recoil.previous = local_player.aim_punch(self);
 
@@ -294,6 +369,7 @@ mod tests {
         assert_eq!(aimbot.current_target_pawn, None);
         assert_eq!(aimbot.target_acquired_time, None);
         assert_eq!(aimbot.inertia, Vec2::ZERO);
+        assert_eq!(aimbot.last_motion_update, None);
     }
 
     #[test]
@@ -303,7 +379,7 @@ mod tests {
             ..Default::default()
         };
 
-        let delta = aimbot.smooth_delta(vec2(-2.0, 2.0), 0.5);
+        let delta = aimbot.smooth_velocity(vec2(-2.0, 2.0), 0.5);
 
         assert_eq!(delta, vec2(-1.0, 1.0));
     }
@@ -315,8 +391,26 @@ mod tests {
             ..Default::default()
         };
 
-        let delta = aimbot.smooth_delta(Vec2::splat(1.0), 0.5);
+        let delta = aimbot.smooth_velocity(Vec2::splat(1.0), 0.5);
 
         assert_eq!(delta, Vec2::ONE);
+    }
+
+    #[test]
+    fn time_scaling_preserves_the_old_two_millisecond_curve() {
+        let reference_fraction = 1.0 / 251.0;
+        let half_step = time_scaled_alpha(reference_fraction, 0.5);
+        let two_half_steps = 1.0 - (1.0 - half_step).powi(2);
+
+        assert!((two_half_steps - reference_fraction).abs() < 1e-6);
+    }
+
+    #[test]
+    fn time_scaling_is_stable_across_loop_frequencies() {
+        let reference_fraction = 1.0 / 51.0;
+        let quarter_step = time_scaled_alpha(reference_fraction, 0.25);
+        let four_quarter_steps = 1.0 - (1.0 - quarter_step).powi(4);
+
+        assert!((four_quarter_steps - reference_fraction).abs() < 1e-6);
     }
 }

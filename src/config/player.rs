@@ -2,8 +2,6 @@ use egui::Color32;
 use serde::{Deserialize, Serialize};
 use strum::EnumIter;
 
-use crate::cs2::key_codes::KeyCode;
-
 #[derive(Debug, Clone, PartialEq, EnumIter, Serialize, Deserialize)]
 pub enum DrawMode {
     None,
@@ -22,8 +20,6 @@ pub enum BoxMode {
 pub struct PlayerConfig {
     pub enabled: bool,
     pub chicken: bool,
-    #[serde(skip_serializing)]
-    pub esp_hotkey: KeyCode,
     pub show_friendlies: bool,
     pub draw_box: DrawMode,
     pub box_mode: BoxMode,
@@ -51,7 +47,6 @@ impl Default for PlayerConfig {
         Self {
             enabled: true,
             chicken: true,
-            esp_hotkey: KeyCode::X,
             show_friendlies: false,
             draw_box: DrawMode::Color,
             box_mode: BoxMode::Gap,

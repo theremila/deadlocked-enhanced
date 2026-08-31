@@ -129,6 +129,9 @@ impl CS2 {
             return None;
         };
         offsets.convar.sensitivity = sensitivity_address;
+        offsets.convar.recoil_scale = self
+            .process
+            .get_convar(offsets.interface.cvar, "weapon_recoil_scale");
 
         let schema = Schema::new(&self.process, offsets.library.schema)?;
         let client = schema.get_library(cs2::CLIENT_LIB)?;
@@ -232,11 +235,15 @@ impl CS2 {
         offsets.weapon_accuracy.inaccuracy_jump_apex =
             client.get("CCSWeaponBaseVData", "m_flInaccuracyJumpApex");
         offsets.weapon_accuracy.max_speed = client.get("CCSWeaponBaseVData", "m_flMaxSpeed");
+        offsets.weapon_accuracy.num_bullets = client.get("CCSWeaponBaseVData", "m_nNumBullets");
         offsets.weapon_accuracy.weapon_mode = client.get("C_CSWeaponBase", "m_weaponMode");
         offsets.weapon_accuracy.turning_inaccuracy =
             client.get("C_CSWeaponBase", "m_flTurningInaccuracy");
         offsets.weapon_accuracy.accuracy_penalty =
             client.get("C_CSWeaponBase", "m_fAccuracyPenalty");
+        offsets.weapon_accuracy.recoil_index = client
+            .get("C_CSWeaponBase", "m_flRecoilIndex")
+            .or_else(|| client.get("C_CSWeaponBase", "m_iRecoilIndex"));
 
         offsets.econ_item_view.item_definition_index =
             client.get("C_EconItemView", "m_iItemDefinitionIndex")?;

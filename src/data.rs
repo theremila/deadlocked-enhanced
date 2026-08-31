@@ -18,6 +18,42 @@ pub enum SoundType {
     Weapon,
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TriggerStatus {
+    #[default]
+    Inactive,
+    NoTarget,
+    ChecksBlocked,
+    AutoStop,
+    Delay,
+    SeedMiss,
+    SeedReady,
+    SeedUnavailable,
+    SeedUnstable,
+    FallbackHitchance,
+    HitchanceMiss,
+    Firing,
+}
+
+impl TriggerStatus {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Inactive => "trigger inactive",
+            Self::NoTarget => "trigger: no target",
+            Self::ChecksBlocked => "trigger: checks blocked",
+            Self::AutoStop => "trigger: autostop",
+            Self::Delay => "trigger: delay",
+            Self::SeedMiss => "trigger: seed miss",
+            Self::SeedReady => "trigger: seed ready",
+            Self::SeedUnavailable => "trigger: seed unavailable",
+            Self::SeedUnstable => "trigger: seed unstable",
+            Self::FallbackHitchance => "trigger: fallback hitchance",
+            Self::HitchanceMiss => "trigger: hitchance miss",
+            Self::Firing => "trigger: firing",
+        }
+    }
+}
+
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Data {
     pub in_game: bool,
@@ -37,6 +73,7 @@ pub struct Data {
     pub aimbot_active: bool,
     pub aim_target_position: Option<Vec3>,
     pub triggerbot_active: bool,
+    pub triggerbot_status: TriggerStatus,
     pub esp_active: bool,
     pub bound_values: HashMap<SettingId, bool>,
 }
@@ -46,6 +83,7 @@ pub struct RuntimeData {
     pub aimbot_active: bool,
     pub aim_target_position: Option<Vec3>,
     pub triggerbot_active: bool,
+    pub triggerbot_status: TriggerStatus,
     pub esp_active: bool,
     pub bound_values: HashMap<SettingId, bool>,
 }
@@ -55,6 +93,7 @@ impl Data {
         self.aimbot_active = runtime.aimbot_active;
         self.aim_target_position = runtime.aim_target_position;
         self.triggerbot_active = runtime.triggerbot_active;
+        self.triggerbot_status = runtime.triggerbot_status;
         self.esp_active = runtime.esp_active;
         self.bound_values.clone_from(&runtime.bound_values);
     }

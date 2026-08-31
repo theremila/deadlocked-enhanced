@@ -141,7 +141,7 @@ impl Mouse {
         })
     }
 
-    pub fn move_rel(&mut self, coords: Vec2) {
+    pub fn move_rel(&mut self, coords: Vec2) -> bool {
         for axis in 0..2 {
             if coords[axis] != 0.0 && coords[axis].signum() != self.fractional[axis].signum() {
                 self.fractional[axis] = 0.0;
@@ -155,7 +155,7 @@ impl Mouse {
         self.fractional.y = total.y - int_y as f32;
 
         if int_x == 0 && int_y == 0 {
-            return;
+            return false;
         }
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
@@ -192,6 +192,7 @@ impl Mouse {
             self.file.write_all(&y.bytes()).unwrap();
         }
         self.file.write_all(&syn.bytes()).unwrap();
+        true
     }
 
     pub fn scroll_down_burst(&mut self, count: usize) {

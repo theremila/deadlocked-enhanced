@@ -279,6 +279,11 @@ impl Player {
         next_attack <= tick_base
     }
 
+    pub(crate) fn tick_base(&self, cs2: &CS2) -> Option<i32> {
+        let offset = cs2.offsets.controller.tick_base?;
+        (self.controller != 0).then(|| cs2.process.read(self.controller + offset))
+    }
+
     pub fn game_scene_node(&self, cs2: &CS2) -> usize {
         cs2.process
             .read(self.pawn + cs2.offsets.pawn.game_scene_node)

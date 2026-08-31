@@ -1,6 +1,7 @@
 use egui::{DragValue, Ui};
 
 use crate::{
+    config::aim::{SeedMode, TriggerTargetingMode},
     config::bind::{AimProfile, AimSetting, RcsSetting, SettingId, TriggerSetting},
     ui::{
         app::AppState,
@@ -47,6 +48,28 @@ impl AppState {
             ui.selectable_value(&mut self.aimbot_tab, AimbotTab::Weapon, "Weapon");
             if self.aimbot_tab == AimbotTab::Weapon {
                 combo_box(ui, "aimbot_weapon", "Weapon", &mut self.aimbot_weapon);
+            }
+            ui.separator();
+            if ui
+                .button("Copy")
+                .on_hover_text("Copy this Aim, Triggerbot and RCS profile")
+                .clicked()
+            {
+                self.aim_profile_clipboard = Some(self.weapon_config_ref().clone());
+            }
+            let can_paste = self.aim_profile_clipboard.is_some();
+            if ui
+                .add_enabled(can_paste, egui::Button::new("Paste"))
+                .on_hover_text("Paste the copied profile into the current weapon")
+                .clicked()
+            {
+                let mut profile = self.aim_profile_clipboard.clone().unwrap();
+                let override_enabled = self.aimbot_tab == AimbotTab::Weapon;
+                profile.aimbot.enable_override = override_enabled;
+                profile.triggerbot.enable_override = override_enabled;
+                profile.rcs.enable_override = override_enabled;
+                *self.weapon_config() = profile;
+                self.send_config();
             }
         });
         ui.separator();
@@ -127,14 +150,20 @@ impl AppState {
             ) {
                 self.send_config();
             }
-            if ui
-                .add(DragRange::new(
-                    "Delay (ms)",
-                    &mut self.weapon_config().triggerbot.delay,
-                    0..=999,
-                ))
-                .changed()
-            {
+            let seed_enabled = self.weapon_config().triggerbot.seed_mode != SeedMode::Off;
+            let delay = ui
+                .add_enabled_ui(!seed_enabled, |ui| {
+                    ui.add(DragRange::new(
+                        "Delay (ms)",
+                        &mut self.weapon_config().triggerbot.delay,
+                        0..=999,
+                    ))
+                })
+                .inner
+                .on_disabled_hover_text(
+                    "Seed prediction fires immediately; delay is used when seed mode is off",
+                );
+            if delay.changed() {
                 self.send_config();
             }
             if ui.button("⚙ Settings").clicked() {
@@ -322,6 +351,65 @@ impl AppState {
 
     fn trigger_advanced(&mut self, ui: &mut Ui) {
         ui.heading("Accuracy");
+        let mut seed_changed = false;
+        let current_seed_mode = self.weapon_config().triggerbot.seed_mode;
+        egui::ComboBox::new("trigger_seed_mode", "Seed")
+            .selected_text(current_seed_mode.label())
+            .show_ui(ui, |ui| {
+                for mode in [SeedMode::Off, SeedMode::Always, SeedMode::WhenAvailable] {
+                    if ui
+                        .selectable_value(
+                            &mut self.weapon_config().triggerbot.seed_mode,
+                            mode,
+                            mode.label(),
+                        )
+                        .clicked()
+                    {
+                        seed_changed = true;
+                    }
+                }
+            })
+            .response
+            .on_hover_text(
+                "Off: use Hitchance. Always: require a validated seed. When Available: use a validated seed and fall back to Hitchance only when prediction data cannot be read",
+            );
+        if seed_changed {
+            self.send_config();
+        }
+        if combo_box(
+            ui,
+            "trigger_targeting_mode",
+            "Targeting Mode",
+            &mut self.weapon_config().triggerbot.targeting_mode,
+        ) {
+            self.send_config();
+        }
+        let fov_targeting =
+            self.weapon_config().triggerbot.targeting_mode == TriggerTargetingMode::Fov;
+        ui.add_enabled_ui(fov_targeting, |ui| {
+            if drag_hover(
+                ui,
+                "FOV",
+                "Maximum world-space offset from the center ray; the closest angular target wins",
+                DragValue::new(&mut self.weapon_config().triggerbot.fov)
+                    .range(1.0..=300.0)
+                    .suffix(" u")
+                    .speed(0.5)
+                    .max_decimals(1),
+            ) {
+                self.send_config();
+            }
+        });
+        if self.bool_setting_hover(
+            ui,
+            "Prefer Aim Target",
+            Some(
+                "Prioritize the active Aim target when it passes Triggerbot's own bones and checks; falls back to the selected targeting mode",
+            ),
+            self.trigger_id(TriggerSetting::PreferAimTarget),
+        ) {
+            self.send_config();
+        }
         if self.bool_setting(ui, "Head Only", self.trigger_id(TriggerSetting::HeadOnly)) {
             self.send_config();
         }
@@ -346,9 +434,10 @@ impl AppState {
                 self.send_config();
             }
         });
-        if drag(
+        if drag_hover(
             ui,
-            "Hitchance",
+            "Fallback Hitchance",
+            "Used with Seed Off, or with When Available when prediction data cannot be read",
             DragValue::new(&mut self.weapon_config().triggerbot.hitchance)
                 .range(0.0..=100.0)
                 .suffix("%")

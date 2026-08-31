@@ -39,7 +39,7 @@ pub struct Config {
     pub accent_color: Color32,
     pub fps: u32,
     pub font: Font,
-    #[serde(default)]
+    #[serde(default = "Config::default_binds")]
     pub binds: Vec<SettingBind>,
 }
 
@@ -84,34 +84,6 @@ impl Config {
         ]
     }
 
-    pub fn ensure_legacy_binds(&mut self) {
-        if !self.binds.is_empty() {
-            return;
-        }
-        self.binds = vec![
-            SettingBind::single(
-                SettingId::Aim(AimProfile::Global, AimSetting::Enabled),
-                self.aim.aimbot_hotkey,
-                self.aim.global.aimbot.mode.into(),
-            ),
-            SettingBind::single(
-                SettingId::Trigger(AimProfile::Global, TriggerSetting::Enabled),
-                self.aim.triggerbot_hotkey,
-                self.aim.global.triggerbot.mode.into(),
-            ),
-            SettingBind::single(
-                SettingId::Player(PlayerSetting::Enabled),
-                self.player.esp_hotkey,
-                BindMode::Toggle,
-            ),
-            SettingBind::single(
-                SettingId::Misc(MiscSetting::Bunnyhop),
-                self.misc.bunnyhop_hotkey,
-                BindMode::Hold,
-            ),
-        ];
-    }
-
     pub fn bool_value(&self, id: &SettingId) -> bool {
         match id {
             SettingId::Aim(profile, setting) => {
@@ -134,6 +106,7 @@ impl Config {
                 match setting {
                     TriggerSetting::Override => value.enable_override,
                     TriggerSetting::Enabled => value.enabled,
+                    TriggerSetting::PreferAimTarget => value.prefer_aim_target,
                     TriggerSetting::AutoStop => value.autostop,
                     TriggerSetting::VisibilityCheck => value.visibility_check,
                     TriggerSetting::ThroughWalls => value.through_walls,
@@ -215,6 +188,7 @@ impl Config {
                 match setting {
                     TriggerSetting::Override => value.enable_override = enabled,
                     TriggerSetting::Enabled => value.enabled = enabled,
+                    TriggerSetting::PreferAimTarget => value.prefer_aim_target = enabled,
                     TriggerSetting::AutoStop => value.autostop = enabled,
                     TriggerSetting::VisibilityCheck => value.visibility_check = enabled,
                     TriggerSetting::ThroughWalls => value.through_walls = enabled,
@@ -337,9 +311,7 @@ pub fn parse_config(path: &Path) -> Config {
     } else if let Some(file_name) = path.file_name() {
         utils::info!("loaded config {:?}", file_name);
     }
-    let mut config = config.unwrap_or_default();
-    config.ensure_legacy_binds();
-    config
+    config.unwrap_or_default()
 }
 
 pub fn write_config(config: &Config, path: &Path) {
@@ -390,4 +362,21 @@ pub fn available_configs() -> Vec<PathBuf> {
         files.push(path);
     }
     files
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::aim::SeedMode;
+
+    #[test]
+    fn seed_mode_round_trips_without_boolean_aliases() {
+        let mut config = Config::default();
+        config.aim.global.triggerbot.seed_mode = SeedMode::Always;
+        let serialized = toml::to_string(&config).unwrap();
+        let parsed: Config = toml::from_str(&serialized).unwrap();
+
+        assert_eq!(parsed.aim.global.triggerbot.seed_mode, SeedMode::Always);
+        assert!(!serialized.contains("use_seed"));
+    }
 }

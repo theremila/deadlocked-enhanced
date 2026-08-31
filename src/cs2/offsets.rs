@@ -31,6 +31,7 @@ pub struct DirectOffsets {
 pub struct ConvarOffsets {
     pub ffa: usize,
     pub sensitivity: usize,
+    pub recoil_scale: Option<usize>,
 }
 
 #[derive(Default)]
@@ -159,9 +160,11 @@ pub struct WeaponAccuracyOffsets {
     pub inaccuracy_jump_initial: Option<usize>,
     pub inaccuracy_jump_apex: Option<usize>,
     pub max_speed: Option<usize>,
+    pub num_bullets: Option<usize>,
     pub weapon_mode: Option<usize>,
     pub turning_inaccuracy: Option<usize>,
     pub accuracy_penalty: Option<usize>,
+    pub recoil_index: Option<usize>,
 }
 
 #[derive(Default)]

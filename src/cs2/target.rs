@@ -6,10 +6,62 @@ use crate::{
     cs2::{
         CS2,
         entity::{player::Player, weapon_class::WeaponClass},
-        hitbox::{multipoints, spheres},
+        hitbox::{HitSphere, multipoints, spheres},
     },
     math::{angles_to_fov, forward_ray_offset},
 };
+
+#[derive(Clone, Copy)]
+pub(crate) enum TargetMetric {
+    Fov,
+    Distance,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct RaycastHit {
+    pub hitbox: HitSphere,
+    pub point: Vec3,
+    pub normalized_offset: f32,
+}
+
+pub(crate) fn target_metric(
+    mode: TargetMetric,
+    view_angles: Vec2,
+    target_angle: Vec2,
+    distance: f32,
+) -> f32 {
+    match mode {
+        TargetMetric::Fov => angles_to_fov(&view_angles, &target_angle),
+        TargetMetric::Distance => distance,
+    }
+}
+
+pub(crate) fn raycast_hitboxes(
+    eye: Vec3,
+    direction: Vec3,
+    hitboxes: &[HitSphere],
+    radius_scale: f32,
+) -> Option<RaycastHit> {
+    hitboxes
+        .iter()
+        .copied()
+        .filter_map(|hitbox| {
+            let to_center = hitbox.center - eye;
+            let projection = to_center.dot(direction);
+            if projection <= 0.0 {
+                return None;
+            }
+            let point = eye + direction * projection;
+            let offset = point.distance(hitbox.center);
+            let allowed = hitbox.radius * radius_scale.clamp(0.01, 1.0);
+            (offset <= allowed).then_some(RaycastHit {
+                hitbox,
+                point,
+                normalized_offset: offset / hitbox.radius,
+            })
+        })
+        .min_by(|left, right| left.normalized_offset.total_cmp(&right.normalized_offset))
+}
 
 #[derive(Default)]
 pub struct Target {
@@ -139,10 +191,11 @@ impl CS2 {
                         continue;
                     }
 
-                    let metric = match &aimbot_config.targeting_mode {
-                        TargetingMode::Fov => fov_deg,
-                        TargetingMode::Distance => distance,
+                    let metric_mode = match aimbot_config.targeting_mode {
+                        TargetingMode::Fov => TargetMetric::Fov,
+                        TargetingMode::Distance => TargetMetric::Distance,
                     };
+                    let metric = target_metric(metric_mode, view_angles, angle, distance);
                     candidates.push(TargetCandidate {
                         player: *player,
                         angle,
@@ -182,5 +235,40 @@ impl CS2 {
             None => self.target.clear_selection(),
         }
         self.target.candidates = candidates;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cs2::bones::Bones;
+
+    #[test]
+    fn raycast_selects_the_hitbox_closest_to_its_center() {
+        let hitboxes = [
+            HitSphere {
+                center: Vec3::new(10.0, 1.5, 0.0),
+                radius: 2.0,
+                bone: Bones::Head,
+            },
+            HitSphere {
+                center: Vec3::new(20.0, 0.5, 0.0),
+                radius: 2.0,
+                bone: Bones::Spine3,
+            },
+        ];
+
+        let selected = raycast_hitboxes(Vec3::ZERO, Vec3::X, &hitboxes, 1.0).unwrap();
+        assert_eq!(selected.hitbox.bone, Bones::Spine3);
+    }
+
+    #[test]
+    fn fov_metric_ignores_distance() {
+        let view = Vec2::ZERO;
+        let angle = Vec2::new(0.0, 5.0);
+        assert_eq!(
+            target_metric(TargetMetric::Fov, view, angle, 10.0),
+            target_metric(TargetMetric::Fov, view, angle, 10_000.0)
+        );
     }
 }

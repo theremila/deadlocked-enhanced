@@ -24,6 +24,19 @@ pub struct ShotPath {
     pub penetrated: bool,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct ShotPathOptions {
+    pub allow_penetration: bool,
+    pub min_damage: i32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RayVolumeHit {
+    pub point: Vec3,
+    pub distance: f32,
+    pub bone: Bones,
+}
+
 pub fn bone_radius(bone: Bones) -> f32 {
     match bone {
         Bones::Head => 4.5,
@@ -104,42 +117,57 @@ pub fn multipoints(hit: HitSphere, eye: Vec3) -> Vec<Vec3> {
     ]
 }
 
-pub fn ray_hits_sphere(origin: Vec3, direction: Vec3, hit: HitSphere) -> bool {
-    let to_center = hit.center - origin;
-    let projection = to_center.dot(direction);
-    projection > 0.0
-        && (to_center.length_squared() - projection * projection) <= hit.radius * hit.radius
+#[cfg(test)]
+pub fn ray_hits_capsule(origin: Vec3, direction: Vec3, capsule: HitCapsule) -> bool {
+    ray_capsule_distance(origin, direction.normalize_or_zero(), capsule).is_some()
 }
 
-pub fn ray_hits_capsule(origin: Vec3, direction: Vec3, capsule: HitCapsule) -> bool {
-    let segment = capsule.end - capsule.start;
+fn ray_sphere_distance(origin: Vec3, direction: Vec3, center: Vec3, radius: f32) -> Option<f32> {
+    let offset = origin - center;
+    let projected = offset.dot(direction);
+    let discriminant = projected * projected - (offset.length_squared() - radius * radius);
+    if discriminant < 0.0 {
+        return None;
+    }
+    let near = -projected - discriminant.sqrt();
+    let far = -projected + discriminant.sqrt();
+    (far > 0.0).then_some(near.max(0.0))
+}
+
+fn ray_capsule_distance(origin: Vec3, direction: Vec3, capsule: HitCapsule) -> Option<f32> {
+    let axis = capsule.end - capsule.start;
     let offset = origin - capsule.start;
-    let segment_len_sq = segment.length_squared();
-    if segment_len_sq <= f32::EPSILON {
-        return ray_hits_sphere(
-            origin,
-            direction,
-            HitSphere {
-                bone: Bones::Head,
-                center: capsule.start,
-                radius: capsule.radius,
-            },
-        );
+    let axis_sq = axis.length_squared();
+    if axis_sq <= f32::EPSILON {
+        return ray_sphere_distance(origin, direction, capsule.start, capsule.radius);
     }
 
-    let segment_dot_ray = segment.dot(direction);
-    let denominator = segment_len_sq - segment_dot_ray * segment_dot_ray;
-    let segment_t = if denominator.abs() <= f32::EPSILON {
-        (-offset.dot(segment) / segment_len_sq).clamp(0.0, 1.0)
-    } else {
-        ((offset.dot(segment) - segment_dot_ray * offset.dot(direction)) / denominator)
-            .clamp(0.0, 1.0)
-    };
-    let closest_on_segment = capsule.start + segment * segment_t;
-    let ray_t = (closest_on_segment - origin).dot(direction);
-    ray_t > 0.0
-        && (origin + direction * ray_t - closest_on_segment).length_squared()
-            <= capsule.radius * capsule.radius
+    let axis_ray = axis.dot(direction);
+    let axis_origin = axis.dot(offset);
+    let ray_origin = direction.dot(offset);
+    let a = axis_sq - axis_ray * axis_ray;
+    let b = axis_sq * ray_origin - axis_origin * axis_ray;
+    let c = axis_sq * offset.length_squared()
+        - axis_origin * axis_origin
+        - capsule.radius * capsule.radius * axis_sq;
+    if a.abs() > f32::EPSILON {
+        let discriminant = b * b - a * c;
+        if discriminant >= 0.0 {
+            let distance = (-b - discriminant.sqrt()) / a;
+            let height = axis_origin + distance * axis_ray;
+            if distance >= 0.0 && height > 0.0 && height < axis_sq {
+                return Some(distance);
+            }
+        }
+    }
+
+    let start = ray_sphere_distance(origin, direction, capsule.start, capsule.radius);
+    let end = ray_sphere_distance(origin, direction, capsule.end, capsule.radius);
+    match (start, end) {
+        (Some(start), Some(end)) => Some(start.min(end)),
+        (Some(distance), None) | (None, Some(distance)) => Some(distance),
+        (None, None) => None,
+    }
 }
 
 pub fn ray_hits_volumes(
@@ -148,14 +176,66 @@ pub fn ray_hits_volumes(
     hit_spheres: &[HitSphere],
     hit_capsules: &[HitCapsule],
 ) -> bool {
-    hit_spheres
-        .iter()
-        .copied()
-        .any(|hit| ray_hits_sphere(origin, direction, hit))
-        || hit_capsules
+    ray_hit_volumes_translated(origin, direction, hit_spheres, hit_capsules, Vec3::ZERO).is_some()
+}
+
+pub fn ray_hit_volumes_translated(
+    origin: Vec3,
+    direction: Vec3,
+    hit_spheres: &[HitSphere],
+    hit_capsules: &[HitCapsule],
+    translation: Vec3,
+) -> Option<RayVolumeHit> {
+    let direction = direction.normalize_or_zero();
+    if direction == Vec3::ZERO {
+        return None;
+    }
+
+    let mut nearest: Option<RayVolumeHit> = None;
+    let mut consider = |candidate: RayVolumeHit| {
+        if nearest.is_none_or(|hit| candidate.distance < hit.distance) {
+            nearest = Some(candidate);
+        }
+    };
+
+    for hit in hit_spheres {
+        let center = hit.center + translation;
+        let Some(distance) = ray_sphere_distance(origin, direction, center, hit.radius) else {
+            continue;
+        };
+        consider(RayVolumeHit {
+            point: origin + direction * distance,
+            distance,
+            bone: hit.bone,
+        });
+    }
+
+    for capsule in hit_capsules {
+        let translated = HitCapsule {
+            start: capsule.start + translation,
+            end: capsule.end + translation,
+            radius: capsule.radius,
+        };
+        let Some(distance) = ray_capsule_distance(origin, direction, translated) else {
+            continue;
+        };
+        let point = origin + direction * distance;
+        let bone = hit_spheres
             .iter()
-            .copied()
-            .any(|hit| ray_hits_capsule(origin, direction, hit))
+            .min_by(|left, right| {
+                (left.center + translation)
+                    .distance_squared(point)
+                    .total_cmp(&(right.center + translation).distance_squared(point))
+            })
+            .map_or(Bones::Spine3, |hit| hit.bone);
+        consider(RayVolumeHit {
+            point,
+            distance,
+            bone,
+        });
+    }
+
+    nearest
 }
 
 impl CS2 {
@@ -169,6 +249,28 @@ impl CS2 {
         min_damage: i32,
     ) -> Option<ShotPath> {
         let start = local.eye_position(self);
+        self.evaluate_shot_path_from(
+            start,
+            local,
+            target,
+            point,
+            bone,
+            ShotPathOptions {
+                allow_penetration,
+                min_damage,
+            },
+        )
+    }
+
+    pub(crate) fn evaluate_shot_path_from(
+        &self,
+        start: Vec3,
+        local: &Player,
+        target: &Player,
+        point: Vec3,
+        bone: Bones,
+        options: ShotPathOptions,
+    ) -> Option<ShotPath> {
         let visible = self.bvh.as_ref().map_or_else(
             || target.visible(self, local),
             |bvh| bvh.has_line_of_sight(start, point),
@@ -181,7 +283,7 @@ impl CS2 {
                 target.armor(self),
                 target.has_helmet(self),
             )
-        } else if allow_penetration {
+        } else if options.allow_penetration {
             self.calculate_damage(
                 start,
                 point,
@@ -192,7 +294,7 @@ impl CS2 {
         } else {
             return None;
         };
-        (damage >= min_damage.max(1) as f32).then_some(ShotPath {
+        (damage >= options.min_damage.max(1) as f32).then_some(ShotPath {
             damage,
             penetrated: !visible,
         })
@@ -229,6 +331,28 @@ mod tests {
             multipoints(hit, Vec3::ZERO)
                 .into_iter()
                 .all(|point| point.distance(hit.center) <= hit.radius)
+        );
+    }
+
+    #[test]
+    fn translated_ray_query_tracks_a_moving_hitbox() {
+        let sphere = HitSphere {
+            bone: Bones::Head,
+            center: Vec3::new(100.0, 10.0, 0.0),
+            radius: 2.0,
+        };
+        assert!(
+            ray_hit_volumes_translated(
+                Vec3::ZERO,
+                Vec3::X,
+                &[sphere],
+                &[],
+                Vec3::new(0.0, -10.0, 0.0),
+            )
+            .is_some()
+        );
+        assert!(
+            ray_hit_volumes_translated(Vec3::ZERO, Vec3::X, &[sphere], &[], Vec3::ZERO).is_none()
         );
     }
 }
