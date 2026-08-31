@@ -61,6 +61,7 @@ pub struct CS2 {
     weapon: Weapon,
     planted_c4: Option<PlantedC4>,
     last_cache: Instant,
+    last_maintenance: Instant,
     bind_runtime: BindRuntime,
     effective_config: Config,
     esp_visibility: HashMap<usize, bool>,
@@ -111,26 +112,29 @@ impl CS2 {
         self.bind_runtime.apply_to(config, &mut effective_config);
         let config = &effective_config;
 
-        if self.last_cache.elapsed() > Duration::from_millis(200) {
+        if self.last_cache.elapsed() >= crate::constants::timing::ENTITY_CACHE_INTERVAL {
             self.cache_entities();
             self.check_bvh();
             self.last_cache = Instant::now();
         }
 
-        for entity in &self.entities {
-            if let Entity::Smoke(smoke) = entity {
-                if config.misc.no_smoke {
-                    smoke.disable(self);
-                }
+        if self.last_maintenance.elapsed() >= crate::constants::timing::MAINTENANCE_INTERVAL {
+            for entity in &self.entities {
+                if let Entity::Smoke(smoke) = entity {
+                    if config.misc.no_smoke {
+                        smoke.disable(self);
+                    }
 
-                if config.misc.change_smoke_color {
-                    smoke.color(self, &config.misc.smoke_color);
+                    if config.misc.change_smoke_color {
+                        smoke.color(self, &config.misc.smoke_color);
+                    }
                 }
             }
+            self.no_flash(config);
+            self.fov_changer(config);
+            self.last_maintenance = Instant::now();
         }
 
-        self.no_flash(config);
-        self.fov_changer(config);
         self.bunnyhop(config, mouse);
 
         self.find_target(config);
@@ -345,6 +349,7 @@ impl CS2 {
                 .then_some(self.target.position),
         );
         data.triggerbot_active = self.trigger.active;
+        data.triggerbot_status = self.trigger.status;
         data.esp_active = config.player.enabled;
 
         if let Some(bomb) = &self.planted_c4 {
@@ -401,6 +406,7 @@ impl CS2 {
             weapon: Weapon::default(),
             planted_c4: None,
             last_cache: Instant::now(),
+            last_maintenance: Instant::now(),
             bind_runtime: BindRuntime::default(),
             effective_config: Config::default(),
             esp_visibility: HashMap::with_capacity(64),

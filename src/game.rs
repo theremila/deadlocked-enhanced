@@ -8,6 +8,7 @@ use utils::{Channel, Mutex};
 
 use crate::{
     config::Config,
+    constants::timing,
     cs2::CS2,
     data::{Data, RuntimeData},
     message::{GameMessage, GameStatus, UiMessage},
@@ -21,6 +22,10 @@ pub struct GameManager {
     config: Config,
     mouse: Mouse,
     cs2: CS2,
+    last_runtime_publish: Instant,
+    last_frame_time_report: Instant,
+    loop_iterations_since_report: u64,
+    slowest_loop_since_report: Duration,
 }
 
 impl GameManager {
@@ -45,6 +50,10 @@ impl GameManager {
             config: Config::default(),
             mouse,
             cs2: CS2::new(),
+            last_runtime_publish: Instant::now(),
+            last_frame_time_report: Instant::now(),
+            loop_iterations_since_report: 0,
+            slowest_loop_since_report: Duration::ZERO,
         }
     }
 
@@ -88,31 +97,42 @@ impl GameManager {
                     previous_status = GameStatus::Working;
                 }
                 self.cs2.run(&self.config, &mut self.mouse);
-                self.cs2.runtime_data(&mut self.runtime_data.lock());
+                let now = Instant::now();
+                if now.duration_since(self.last_runtime_publish) >= timing::RUNTIME_PUBLISH_INTERVAL
+                {
+                    self.cs2.runtime_data(&mut self.runtime_data.lock());
+                    self.last_runtime_publish = now;
+                }
             } else {
                 *self.runtime_data.lock() = RuntimeData::default();
             }
 
             if is_valid {
                 let elapsed = start.elapsed();
-                if elapsed < self.loop_duration() {
-                    sleep(self.loop_duration() - elapsed);
-                } else {
-                    utils::debug!(
-                        "game loop took {} ms (max {} ms)",
-                        elapsed.as_millis(),
-                        self.loop_duration().as_millis()
-                    );
+                self.loop_iterations_since_report += 1;
+                self.slowest_loop_since_report = self.slowest_loop_since_report.max(elapsed);
+                let report_at = Instant::now();
+                let report_window = report_at.duration_since(self.last_frame_time_report);
+                if report_window >= timing::FRAME_TIME_REPORT_INTERVAL {
+                    if self.slowest_loop_since_report >= timing::SLOW_LOOP_WARNING {
+                        utils::debug!(
+                            "slowest hot-loop pass took {} ms (warning threshold {} ms)",
+                            self.slowest_loop_since_report.as_millis(),
+                            timing::SLOW_LOOP_WARNING.as_millis()
+                        );
+                    }
+                    let average_period =
+                        report_window.div_f64(self.loop_iterations_since_report as f64);
+                    self.send_message(UiMessage::FrameTime(average_period));
+                    self.last_frame_time_report = report_at;
+                    self.loop_iterations_since_report = 0;
+                    self.slowest_loop_since_report = Duration::ZERO;
                 }
-                self.send_message(UiMessage::FrameTime(elapsed));
+                std::hint::spin_loop();
             } else {
-                sleep(Duration::from_secs(5));
+                sleep(timing::INVALID_PROCESS_RETRY_INTERVAL);
             }
         }
-    }
-
-    fn loop_duration(&self) -> Duration {
-        Duration::from_millis(2)
     }
 }
 
@@ -125,8 +145,6 @@ pub struct EspManager {
 }
 
 impl EspManager {
-    const FRAME_DURATION: Duration = Duration::from_millis(8);
-
     pub fn new(data: Arc<Mutex<Data>>, shared_config: Arc<Mutex<Arc<Config>>>) -> Self {
         Self {
             data,
@@ -156,13 +174,13 @@ impl EspManager {
                 std::mem::swap(&mut *self.data.lock(), &mut self.pending_data);
 
                 let elapsed = start.elapsed();
-                if elapsed < Self::FRAME_DURATION {
-                    sleep(Self::FRAME_DURATION - elapsed);
+                if elapsed < timing::ESP_FRAME_INTERVAL {
+                    sleep(timing::ESP_FRAME_INTERVAL - elapsed);
                 }
             } else {
                 self.pending_data = Data::default();
                 std::mem::swap(&mut *self.data.lock(), &mut self.pending_data);
-                sleep(Duration::from_secs(5));
+                sleep(timing::INVALID_PROCESS_RETRY_INTERVAL);
             }
         }
     }
