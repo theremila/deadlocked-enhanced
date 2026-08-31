@@ -60,3 +60,24 @@ pub mod elf {
 }
 
 pub const GRENADE_FILE_NAME: &str = "grenades.json";
+
+pub mod timing {
+    use std::time::Duration;
+
+    pub const ENTITY_CACHE_INTERVAL: Duration = Duration::from_millis(200);
+    pub const MAINTENANCE_INTERVAL: Duration = Duration::from_millis(8);
+    pub const RUNTIME_PUBLISH_INTERVAL: Duration = Duration::from_millis(2);
+    pub const FRAME_TIME_REPORT_INTERVAL: Duration = Duration::from_millis(250);
+    pub const SLOW_LOOP_WARNING: Duration = Duration::from_millis(2);
+    pub const INVALID_PROCESS_RETRY_INTERVAL: Duration = Duration::from_secs(1);
+    pub const ESP_FRAME_INTERVAL: Duration = Duration::from_millis(8);
+
+    pub const BHOP_FULL_RETRY_INTERVAL: Duration = Duration::from_millis(2);
+    pub const BHOP_LEGIT_RETRY_INTERVAL: Duration = Duration::from_millis(6);
+
+    // Aim/RCS tuning historically assumed one update after a 2 ms loop sleep.
+    // Keep that response curve as the time-normalization reference.
+    pub const AIM_REFERENCE_INTERVAL: Duration = Duration::from_millis(2);
+    pub const AIM_MAX_TIMESTEP: Duration = Duration::from_millis(8);
+    pub const RCS_UPDATE_INTERVAL: Duration = Duration::from_millis(2);
+}

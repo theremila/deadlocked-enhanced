@@ -1,5 +1,8 @@
+use std::time::{Duration, Instant};
+
 use crate::{
     config::{Config, r#unsafe::BunnyhopMode},
+    constants::timing,
     cs2::{CS2, entity::player::Player},
     os::mouse::Mouse,
 };
@@ -8,7 +11,7 @@ use crate::{
 pub struct Bunnyhop {
     pub space_down: bool,
     pub was_in_air: bool,
-    pub ground_ticks: u32,
+    next_ground_attempt: Option<Instant>,
 }
 
 impl Bunnyhop {
@@ -17,43 +20,46 @@ impl Bunnyhop {
             mouse.space_release();
         }
         self.was_in_air = false;
-        self.ground_ticks = 0;
+        self.next_ground_attempt = None;
     }
 
     fn airborne(&mut self, mouse: &mut Mouse) {
         self.was_in_air = true;
-        self.ground_ticks = 0;
+        self.next_ground_attempt = None;
         if std::mem::take(&mut self.space_down) {
             mouse.space_release();
         }
     }
 
-    fn landed(&mut self, mouse: &mut Mouse, scroll_ticks: usize) {
+    fn jump_attempt(
+        &mut self,
+        mouse: &mut Mouse,
+        now: Instant,
+        scroll_ticks: usize,
+        retry_interval: Duration,
+    ) {
+        if self.space_down {
+            mouse.space_release();
+        }
         mouse.scroll_down_burst(scroll_ticks);
         mouse.space_press();
         self.space_down = true;
         self.was_in_air = false;
-        self.ground_ticks = 0;
+        self.next_ground_attempt = Some(now + retry_interval);
     }
 
     fn grounded(
         &mut self,
         mouse: &mut Mouse,
-        initial_scroll_ticks: u32,
-        reset_tick: u32,
+        now: Instant,
         scroll_burst: usize,
+        retry_interval: Duration,
     ) {
-        self.ground_ticks = self.ground_ticks.saturating_add(1);
-        if self.ground_ticks <= initial_scroll_ticks {
-            mouse.scroll_down_burst(scroll_burst);
-        } else if self.ground_ticks >= reset_tick {
-            if self.space_down {
-                mouse.space_release();
-            }
-            mouse.scroll_down_burst(scroll_burst);
-            mouse.space_press();
-            self.space_down = true;
-            self.ground_ticks = 0;
+        if self
+            .next_ground_attempt
+            .is_none_or(|deadline| now >= deadline)
+        {
+            self.jump_attempt(mouse, now, scroll_burst, retry_interval);
         }
     }
 }
@@ -80,17 +86,17 @@ impl CS2 {
             return;
         }
 
-        let (landing_burst, initial_ticks, reset_tick, ground_burst) =
-            match config.misc.bunnyhop_mode {
-                BunnyhopMode::Full => (4, 2, 6, 2),
-                BunnyhopMode::Legit => (2, 3, 8, 1),
-            };
+        let (landing_burst, ground_burst, retry_interval) = match config.misc.bunnyhop_mode {
+            BunnyhopMode::Full => (4, 2, timing::BHOP_FULL_RETRY_INTERVAL),
+            BunnyhopMode::Legit => (2, 1, timing::BHOP_LEGIT_RETRY_INTERVAL),
+        };
+        let now = Instant::now();
 
         if self.bhop.was_in_air {
-            self.bhop.landed(mouse, landing_burst);
-        } else {
             self.bhop
-                .grounded(mouse, initial_ticks, reset_tick, ground_burst);
+                .jump_attempt(mouse, now, landing_burst, retry_interval);
+        } else {
+            self.bhop.grounded(mouse, now, ground_burst, retry_interval);
         }
     }
 }

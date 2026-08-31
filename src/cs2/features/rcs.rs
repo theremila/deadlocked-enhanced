@@ -1,9 +1,10 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, time::Instant};
 
 use glam::Vec2;
 
 use crate::{
     config::Config,
+    constants::timing,
     cs2::{
         CS2,
         entity::{player::Player, weapon_class::WeaponClass},
@@ -61,6 +62,7 @@ pub struct Recoil {
     unaccounted: Vec2,
     velocity: Vec2,
     accel_history: VecDeque<Vec2>,
+    next_update: Option<Instant>,
 }
 
 impl Default for Recoil {
@@ -70,6 +72,7 @@ impl Default for Recoil {
             unaccounted: Vec2::ZERO,
             velocity: Vec2::ZERO,
             accel_history: VecDeque::with_capacity(ACCEL_HISTORY_MAX),
+            next_update: None,
         }
     }
 }
@@ -78,6 +81,15 @@ impl Recoil {
     fn reset_smoothing(&mut self) {
         self.velocity = Vec2::ZERO;
         self.accel_history.clear();
+        self.next_update = None;
+    }
+
+    fn update_due(&mut self, now: Instant) -> bool {
+        if self.next_update.is_some_and(|deadline| now < deadline) {
+            return false;
+        }
+        self.next_update = Some(now + timing::RCS_UPDATE_INTERVAL);
+        true
     }
 }
 
@@ -86,10 +98,16 @@ impl CS2 {
         let config = self.rcs_config(config);
 
         if !config.enabled {
+            self.recoil.reset_smoothing();
+            return;
+        }
+
+        if !self.recoil.update_due(Instant::now()) {
             return;
         }
 
         let Some(local_player) = Player::local_player(self) else {
+            self.recoil.reset_smoothing();
             return;
         };
 
@@ -102,6 +120,7 @@ impl CS2 {
             WeaponClass::Shotgun,
         ];
         if disallowed_weapons.contains(&weapon_class) {
+            self.recoil.reset_smoothing();
             return;
         }
 
@@ -150,6 +169,21 @@ impl CS2 {
 
         self.recoil.unaccounted = desired - ready;
 
-        mouse.move_rel(ready)
+        mouse.move_rel(ready);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rcs_updates_on_its_own_interval() {
+        let mut recoil = Recoil::default();
+        let now = Instant::now();
+
+        assert!(recoil.update_due(now));
+        assert!(!recoil.update_due(now + timing::RCS_UPDATE_INTERVAL / 2));
+        assert!(recoil.update_due(now + timing::RCS_UPDATE_INTERVAL));
     }
 }
