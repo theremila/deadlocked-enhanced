@@ -17,7 +17,6 @@ use crate::{
         },
         window_context::WindowContext,
     },
-    update::UpdateStatus,
 };
 
 pub mod aimbot;
@@ -271,38 +270,6 @@ impl AppState {
 
         self.render_text_popups(ui);
         self.render_bind_popup(ui);
-
-        if self.update_popup {
-            let mut close = false;
-            egui::Window::new("Update Available")
-                .id(egui::Id::new("update_popup"))
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-                .show(ui.ctx(), |ui| {
-                    if let UpdateStatus::Available { version, url } = &self.update_status {
-                        ui.label(
-                            egui::RichText::new(format!("Update {version} available!"))
-                                .color(Colors::YELLOW)
-                                .size(18.0),
-                        );
-                        ui.separator();
-                        ui.label("A new version of deadlocked is ready to download.");
-                        ui.add_space(8.0);
-                        ui.horizontal(|ui| {
-                            if ui.button("Download").clicked() {
-                                open_url(url);
-                            }
-                            if ui.button("Dismiss").clicked() {
-                                close = true;
-                            }
-                        });
-                    }
-                });
-            if close {
-                self.update_popup = false;
-            }
-        }
     }
 
     fn weapon_config(&mut self) -> &mut WeaponConfig {

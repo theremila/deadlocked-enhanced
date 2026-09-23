@@ -1,5 +1,5 @@
 [workspace]
-members = ["cheat", "shared"]
+members = ["cheat", "shared", "utils"]
 resolver = "3"
 
 [profile.release]
@@ -9,8 +9,7 @@ strip = true
 
 [workspace.dependencies]
 shared.path = "shared"
-
-utils.git = "https://codeberg.org/avitrano/utils"
+utils.path = "utils"
 
 glam = { version = "0.33", features = ["bytemuck", "serde"] }
 postcard = { version = "1.1", features = ["use-std"] }

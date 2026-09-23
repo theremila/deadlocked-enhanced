@@ -34,9 +34,7 @@ glutin-winit = { version = "0.5", default-features = false, features = [
 nix = { version = "0.31", features = ["ioctl"] }
 rand = "0.10"
 rand_distr = "0.6"
-semver = "1.0"
 toml = "1.0"
-ureq = { version = "3", features = ["json"] }
 winit = { version = "0.30", default-features = false, features = ["x11"] }
 
 [features]

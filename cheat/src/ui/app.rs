@@ -31,7 +31,6 @@ use crate::{
         trail::Trail,
         window_context::WindowContext,
     },
-    update::UpdateStatus,
 };
 
 pub struct AppState {
@@ -64,10 +63,7 @@ pub struct AppState {
     pub aim_settings_popup: Option<AimSettingsPopup>,
     pub feature_settings_popup: Option<FeatureSettingsPopup>,
 
-    pub update_status: UpdateStatus,
-
     pub text_popup: Option<String>,
-    pub update_popup: bool,
     pub overlay_egui: Option<egui::Context>,
     pub bind_popup: Option<SettingId>,
 }
@@ -104,9 +100,6 @@ impl AppState {
         let app_config = read_app_config();
         write_app_config(&app_config);
 
-        let update_status = crate::update::check();
-        let update_popup = matches!(update_status, crate::update::UpdateStatus::Available { .. });
-
         Self {
             channel_game,
             data,
@@ -131,9 +124,7 @@ impl AppState {
             aim_profile_clipboard: None,
             aim_settings_popup: None,
             feature_settings_popup: None,
-            update_status,
             text_popup: None,
-            update_popup,
             overlay_egui: None,
             bind_popup: None,
         }
