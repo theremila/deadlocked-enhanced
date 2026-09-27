@@ -6,10 +6,13 @@ use crate::cs2::{
     CS2,
     accuracy::{WeaponAccuracy, view_basis},
     entity::player::Player,
-    hitbox::{HitCapsule, HitSphere, ShotPathOptions, ray_hit_volumes_translated},
+    extrapolation::extrapolation_translation,
+    hitbox::{
+        HitCapsule, HitSphere, ShotPathOptions, ray_all_hit_volumes_translated,
+    },
 };
 
-pub(crate) const PREDICTION_TICKS: i32 = 2;
+pub(crate) const PREDICTION_TICKS: i32 = 1;
 const TICK_INTERVAL: f32 = 1.0 / 64.0;
 
 #[derive(Clone, Copy, Debug)]
@@ -20,13 +23,26 @@ pub(crate) struct SeedSnapshot {
 
 impl SeedSnapshot {
     pub(crate) fn is_current(self, command_angles: Vec2, tick: i32) -> bool {
-        self.tick == tick && self.command_angles == command_angles
+        self.tick == tick
+            && (self.command_angles.x - command_angles.x).abs() <= 0.05
+            && (self.command_angles.y - command_angles.y).abs() <= 0.05
+            && quantize_angle(self.command_angles.x) == quantize_angle(command_angles.x)
+            && quantize_angle(self.command_angles.y) == quantize_angle(command_angles.y)
     }
 }
 
 #[derive(Clone, Copy, Debug)]
+#[allow(dead_code)]
+pub(crate) struct SeedPredictionSuccess {
+    pub snapshot: SeedSnapshot,
+    pub bone: shared::Bones,
+    pub damage: f32,
+    pub point: glam::Vec3,
+}
+
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum SeedPrediction {
-    Ready(SeedSnapshot),
+    Ready(SeedPredictionSuccess),
     Miss,
     Unavailable,
 }
@@ -39,19 +55,12 @@ pub(crate) struct SeedTarget<'a> {
 }
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 pub(crate) struct SeedPredictionOptions {
     pub allow_penetration: bool,
     pub smoke_check: bool,
     pub tick_offset: i32,
     pub prediction_ticks: i32,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct SeedShotMarker {
-    pub weapon: usize,
-    pub tick: i32,
-    pub clip_ammo: i32,
-    pub recoil_index: f32,
 }
 
 struct ValveRng {
@@ -169,9 +178,9 @@ fn sha1_first_u32(data: &[u8]) -> u32 {
     state[0].swap_bytes()
 }
 
-fn quantize_angle(angle: f32) -> f32 {
+pub(crate) fn quantize_angle(angle: f32) -> f32 {
     let normalized = angle - (angle / 360.0 + 0.5).floor() * 360.0;
-    (normalized * 2.0).round() * 0.5
+    (normalized * 2.0).floor() * 0.5
 }
 
 fn spread_seed(angles: Vec2, tick: i32) -> u32 {
@@ -235,23 +244,12 @@ fn spread_offset(
     )
 }
 
+#[allow(dead_code)]
 fn prediction_window_hits(hits: impl IntoIterator<Item = bool>) -> bool {
     hits.into_iter().all(|hit| hit)
 }
 
 impl CS2 {
-    pub(crate) fn seed_shot_marker(&self, local: &Player) -> Option<SeedShotMarker> {
-        let weapon = local.weapon_address(self)?;
-        let tick = local.tick_base(self)?;
-        let recoil_offset = self.offsets.weapon_accuracy.recoil_index?;
-        Some(SeedShotMarker {
-            weapon,
-            tick,
-            clip_ammo: self.process.read(weapon + self.offsets.weapon.clip_primary),
-            recoil_index: self.process.read(weapon + recoil_offset),
-        })
-    }
-
     pub(crate) fn seed_prediction(
         &self,
         local: &Player,
@@ -312,51 +310,63 @@ impl CS2 {
         let local_velocity = local.velocity(self);
         let target_velocity = target.player.velocity(self);
 
-        // Every plausible server tick must produce a valid shot.
-        let hits =
-            prediction_window_hits((0..options.prediction_ticks.max(1)).map(|prediction_tick| {
-                let candidate_offset = options.tick_offset + prediction_tick;
-                let prediction_time = candidate_offset as f32 * TICK_INTERVAL;
-                let candidate_eye = eye + local_velocity * prediction_time;
-                let target_translation = target_velocity * prediction_time;
-                let seed = spread_seed(command_angles, tick + candidate_offset);
-                let spread = spread_offset(
-                    seed.wrapping_add(1) as i32,
-                    accuracy,
-                    recoil_index,
-                    item_definition,
-                    num_bullets,
-                );
-                let direction = (forward + right * spread.x + up * spread.y).normalize();
-                let Some(hit) = ray_hit_volumes_translated(
-                    candidate_eye,
-                    direction,
-                    target.spheres,
-                    target.capsules,
-                    target_translation,
-                ) else {
-                    return false;
-                };
-                if options.smoke_check && self.is_line_in_smoke(candidate_eye, hit.point) {
-                    return false;
+        let candidate_offset = options.tick_offset;
+        let prediction_time = candidate_offset as f32 * TICK_INTERVAL;
+        let candidate_eye = eye + local_velocity * prediction_time;
+        let target_translation = extrapolation_translation(
+            target_velocity,
+            target.player.is_in_air(self),
+            prediction_time,
+        );
+        let seed = spread_seed(command_angles, tick + candidate_offset);
+        let spread = spread_offset(
+            seed.wrapping_add(1) as i32,
+            accuracy,
+            recoil_index,
+            item_definition,
+            num_bullets,
+        );
+        let direction = (forward + right * spread.x + up * spread.y).normalize();
+
+        let all_hits = ray_all_hit_volumes_translated(
+            candidate_eye,
+            direction,
+            target.spheres,
+            target.capsules,
+            target_translation,
+        );
+
+        let mut best_hit: Option<(shared::Bones, f32, glam::Vec3)> = None;
+        for hit in all_hits {
+            if options.smoke_check && self.is_line_in_smoke(candidate_eye, hit.point) {
+                continue;
+            }
+            if let Some(path) = self.evaluate_shot_path_from(
+                candidate_eye,
+                local,
+                target.player,
+                hit.point,
+                hit.bone,
+                ShotPathOptions {
+                    allow_penetration: options.allow_penetration,
+                    min_damage: target.min_damage,
+                },
+            ) {
+                if best_hit.as_ref().is_none_or(|best| path.damage > best.1) {
+                    best_hit = Some((hit.bone, path.damage, hit.point));
                 }
-                self.evaluate_shot_path_from(
-                    candidate_eye,
-                    local,
-                    target.player,
-                    hit.point,
-                    hit.bone,
-                    ShotPathOptions {
-                        allow_penetration: options.allow_penetration,
-                        min_damage: target.min_damage,
-                    },
-                )
-                .is_some()
-            }));
-        if hits {
-            SeedPrediction::Ready(SeedSnapshot {
-                command_angles,
-                tick,
+            }
+        }
+
+        if let Some((bone, damage, point)) = best_hit {
+            SeedPrediction::Ready(SeedPredictionSuccess {
+                snapshot: SeedSnapshot {
+                    command_angles,
+                    tick,
+                },
+                bone,
+                damage,
+                point,
             })
         } else {
             SeedPrediction::Miss
@@ -393,7 +403,9 @@ mod tests {
             tick: 100,
         };
         assert!(snapshot.is_current(Vec2::new(10.0, 20.0), 100));
+        assert!(snapshot.is_current(Vec2::new(10.02, 20.0), 100));
         assert!(!snapshot.is_current(Vec2::new(10.1, 20.0), 100));
+        assert!(!snapshot.is_current(Vec2::new(10.6, 20.0), 100));
         assert!(!snapshot.is_current(Vec2::new(10.0, 20.0), 101));
     }
 }

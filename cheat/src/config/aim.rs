@@ -47,12 +47,20 @@ pub struct AimbotConfig {
     pub inertia: f32,
     /// Seconds of target motion to lead when aiming.
     pub prediction_time: f32,
+    #[serde(default = "default_true")]
+    pub auto_extrapolation: bool,
+    #[serde(default = "default_true")]
+    pub interpolation: bool,
     pub bones: Vec<Bones>,
     pub targeting_mode: TargetingMode,
     pub humanize: bool,
     pub curve: f32,
     pub tremor: f32,
     pub overshoot: f32,
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 impl Default for AimbotConfig {
@@ -74,6 +82,8 @@ impl Default for AimbotConfig {
             reaction_time: 0,
             inertia: 1.0,
             prediction_time: 0.05,
+            auto_extrapolation: true,
+            interpolation: true,
             bones: vec![
                 Bones::Head,
                 Bones::Neck,
@@ -174,6 +184,14 @@ pub struct TriggerbotConfig {
     pub prefer_aim_target: bool,
     pub min_damage: i32,
     pub autostop: bool,
+    #[serde(default = "default_true")]
+    pub autostop_early: bool,
+    #[serde(default)]
+    pub autostop_between_shots: bool,
+    #[serde(default)]
+    pub autostop_in_air: bool,
+    #[serde(default = "default_true")]
+    pub auto_extrapolation: bool,
     pub visibility_check: bool,
     pub through_walls: bool,
     pub smoke_check: bool,
@@ -202,6 +220,10 @@ impl Default for TriggerbotConfig {
             prefer_aim_target: true,
             min_damage: 20,
             autostop: false,
+            autostop_early: true,
+            autostop_between_shots: false,
+            autostop_in_air: false,
+            auto_extrapolation: true,
             visibility_check: true,
             through_walls: false,
             smoke_check: true,

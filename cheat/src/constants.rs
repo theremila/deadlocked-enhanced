@@ -69,8 +69,8 @@ pub mod timing {
     pub const INVALID_PROCESS_RETRY_INTERVAL: Duration = Duration::from_secs(1);
     pub const ESP_FRAME_INTERVAL: Duration = Duration::from_millis(8);
 
-    pub const BHOP_FULL_RETRY_INTERVAL: Duration = Duration::from_millis(2);
-    pub const BHOP_LEGIT_RETRY_INTERVAL: Duration = Duration::from_millis(6);
+    pub const BHOP_FULL_RETRY_INTERVAL: Duration = Duration::from_millis(25);
+    pub const BHOP_LEGIT_RETRY_INTERVAL: Duration = Duration::from_millis(35);
 
     // Aim/RCS tuning historically assumed one update after a 2 ms loop sleep.
     // Keep that response curve as the time-normalization reference.

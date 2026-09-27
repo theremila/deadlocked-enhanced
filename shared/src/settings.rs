@@ -21,6 +21,8 @@ pub enum AimSetting {
     FlashCheck,
     InAirCheck,
     Humanize,
+    AutoExtrapolation,
+    Interpolation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -30,6 +32,9 @@ pub enum TriggerSetting {
     Enabled,
     PreferAimTarget,
     AutoStop,
+    AutoStopEarly,
+    AutoStopBetweenShots,
+    AutoStopInAir,
     VisibilityCheck,
     ThroughWalls,
     SmokeCheck,
@@ -39,6 +44,7 @@ pub enum TriggerSetting {
     VelocityCheck,
     HeadOnly,
     PreferCenter,
+    AutoExtrapolation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -109,7 +115,14 @@ impl SettingId {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Aim(_, AimSetting::Enabled) => "Aim Assist",
+            Self::Aim(_, AimSetting::AutoExtrapolation) => "Aim Auto Extrapolation",
+            Self::Aim(_, AimSetting::Interpolation) => "Aim Interpolation",
             Self::Trigger(_, TriggerSetting::Enabled) => "Triggerbot",
+            Self::Trigger(_, TriggerSetting::AutoStop) => "Autostop",
+            Self::Trigger(_, TriggerSetting::AutoStopEarly) => "Autostop Early",
+            Self::Trigger(_, TriggerSetting::AutoStopBetweenShots) => "Autostop Between Shots",
+            Self::Trigger(_, TriggerSetting::AutoStopInAir) => "Autostop In Air",
+            Self::Trigger(_, TriggerSetting::AutoExtrapolation) => "Trigger Auto Extrapolation",
             Self::Rcs(_, RcsSetting::Enabled) => "RCS",
             Self::Player(PlayerSetting::Enabled) => "Player ESP",
             Self::Player(PlayerSetting::OofArrows) => "OOF Arrows",

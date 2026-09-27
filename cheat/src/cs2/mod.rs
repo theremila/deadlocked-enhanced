@@ -35,6 +35,7 @@ mod binds;
 pub mod bvh;
 pub mod class;
 pub mod entity;
+pub mod extrapolation;
 mod features;
 mod hitbox;
 mod input;
@@ -610,11 +611,14 @@ impl CS2 {
 
     fn check_bvh(&mut self) {
         let current_map = self.current_map();
+        if current_map.is_empty() || current_map == "<empty>" {
+            return;
+        }
         if let Some(material_bvh) = take_material_bvh(&current_map) {
             self.bvh = Some(material_bvh);
             utils::info!("activated material-aware BVH for {current_map}");
         }
-        if self.bvh.is_none() || (!current_map.is_empty() && current_map != self.current_bvh) {
+        if self.bvh.is_none() || current_map != self.current_bvh {
             self.bvh = read_map(self, &current_map);
             if self.bvh.is_some() {
                 utils::info!("loaded bvh for {current_map}");

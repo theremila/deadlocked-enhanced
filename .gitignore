@@ -2,5 +2,6 @@
 .vscode
 .direnv
 
-/target
+target/
 /deadlocked
+/resources/source2viewer

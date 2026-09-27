@@ -4,7 +4,7 @@ use std::f32::consts::TAU;
 use crate::cs2::{
     CS2,
     entity::player::Player,
-    hitbox::{HitCapsule, HitSphere, ray_hits_volumes},
+    hitbox::{HitCapsule, HitSphere, ray_hit_volumes_translated},
 };
 
 const HITCHANCE_SEEDS: usize = 256;
@@ -24,8 +24,8 @@ pub fn view_basis(angles: Vec2) -> (Vec3, Vec3, Vec3) {
         pitch.cos() * yaw.sin(),
         -pitch.sin(),
     );
-    let right = Vec3::new(-yaw.sin(), yaw.cos(), 0.0);
-    let up = forward.cross(right).normalize();
+    let right = Vec3::new(yaw.sin(), -yaw.cos(), 0.0);
+    let up = right.cross(forward).normalize();
     (forward, right, up)
 }
 
@@ -54,11 +54,32 @@ fn spread_offset(seed: usize, accuracy: WeaponAccuracy) -> Vec2 {
     )
 }
 
+#[allow(dead_code)]
 pub fn meets_hitchance(
     eye: Vec3,
     view_angles: Vec2,
     spheres: &[HitSphere],
     capsules: &[HitCapsule],
+    accuracy: WeaponAccuracy,
+    required: f32,
+) -> bool {
+    meets_hitchance_translated(
+        eye,
+        view_angles,
+        spheres,
+        capsules,
+        Vec3::ZERO,
+        accuracy,
+        required,
+    )
+}
+
+pub fn meets_hitchance_translated(
+    eye: Vec3,
+    view_angles: Vec2,
+    spheres: &[HitSphere],
+    capsules: &[HitCapsule],
+    translation: Vec3,
     accuracy: WeaponAccuracy,
     required: f32,
 ) -> bool {
@@ -75,7 +96,7 @@ pub fn meets_hitchance(
         let offset = spread_offset(seed, accuracy);
         let direction = (forward + right * offset.x + up * offset.y).normalize();
 
-        if ray_hits_volumes(eye, direction, spheres, capsules) {
+        if ray_hit_volumes_translated(eye, direction, spheres, capsules, translation).is_some() {
             hits += 1;
             if hits >= required_hits {
                 return true;
@@ -145,7 +166,7 @@ impl CS2 {
         (inaccuracy.is_finite()
             && spread.is_finite()
             && max_speed > 0.0
-            && (0.0..=1.0).contains(&inaccuracy)
+            && (0.0..=3.0).contains(&inaccuracy)
             && (0.0..=1.0).contains(&spread))
         .then_some(WeaponAccuracy {
             inaccuracy,
@@ -185,5 +206,20 @@ mod tests {
             .sum::<f32>()
             / HITCHANCE_SEEDS as f32;
         assert!((0.42..=0.58).contains(&average));
+    }
+
+    #[test]
+    fn view_basis_orientation_matches_source_coordinate_system() {
+        let angles = Vec2::new(0.0, 0.0);
+        let (forward, right, up) = view_basis(angles);
+        assert!((forward - Vec3::new(1.0, 0.0, 0.0)).length() < 1e-5);
+        assert!((right - Vec3::new(0.0, -1.0, 0.0)).length() < 1e-5);
+        assert!((up - Vec3::new(0.0, 0.0, 1.0)).length() < 1e-5);
+
+        let angles_north = Vec2::new(0.0, 90.0);
+        let (f_north, r_north, u_north) = view_basis(angles_north);
+        assert!((f_north - Vec3::new(0.0, 1.0, 0.0)).length() < 1e-5);
+        assert!((r_north - Vec3::new(1.0, 0.0, 0.0)).length() < 1e-5);
+        assert!((u_north - Vec3::new(0.0, 0.0, 1.0)).length() < 1e-5);
     }
 }

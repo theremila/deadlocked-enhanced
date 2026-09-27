@@ -6,6 +6,7 @@ use crate::{
     cs2::{
         CS2,
         entity::player::Player,
+        extrapolation::{calculate_latency_seconds, extrapolation_translation},
         hitbox::{HitSphere, multipoints, spheres},
     },
     math::{angles_to_fov, forward_ray_offset},
@@ -47,13 +48,21 @@ pub(crate) fn raycast_hitboxes(
         .copied()
         .filter_map(|hitbox| {
             let to_center = hitbox.center - eye;
+            let center_distance = to_center.length();
+            let allowed = hitbox.radius * radius_scale.clamp(0.01, 1.0);
+            if center_distance <= allowed {
+                return Some(RaycastHit {
+                    hitbox,
+                    point: eye,
+                    normalized_offset: 0.0,
+                });
+            }
             let projection = to_center.dot(direction);
             if projection <= 0.0 {
                 return None;
             }
             let point = eye + direction * projection;
             let offset = point.distance(hitbox.center);
-            let allowed = hitbox.radius * radius_scale.clamp(0.01, 1.0);
             (offset <= allowed).then_some(RaycastHit {
                 hitbox,
                 point,
@@ -82,6 +91,7 @@ struct TargetCandidate {
     bone_index: u64,
     bone: Bones,
     position: Vec3,
+    eval_position: Vec3,
     metric: f32,
     allow_penetration: bool,
     min_damage: f32,
@@ -114,22 +124,30 @@ impl CS2 {
 
         let view_angles = local_player.view_angles(self);
         let ffa = self.is_ffa();
-        let shots_fired = local_player.shots_fired(self);
-        let aim_punch = match (weapon_class, local_player.aim_punch(self) * 2.0) {
-            (WeaponClass::Sniper, _) => Vec2::ZERO,
-            (_, punch) if punch.length() == 0.0 && shots_fired > 1 => {
-                self.target.previous_aim_punch
-            }
-            (_, punch) => punch,
-        };
-        self.target.previous_aim_punch = aim_punch;
-
         let aimbot_config = self.aimbot_config(config);
         let triggerbot_config = self.triggerbot_config(config);
         if !aimbot_config.enabled || aimbot_config.bones.is_empty() {
             self.target.clear_selection();
             return;
         }
+
+        let shots_fired = local_player.shots_fired(self);
+        let raw_punch = match (weapon_class, local_player.aim_punch(self) * 2.0) {
+            (WeaponClass::Sniper, _) => Vec2::ZERO,
+            (_, punch) if punch.length() == 0.0 && shots_fired > 1 => {
+                self.target.previous_aim_punch
+            }
+            (_, punch) => punch,
+        };
+        let aim_punch = if aimbot_config.interpolation
+            && shots_fired > 1
+            && self.target.previous_aim_punch != Vec2::ZERO
+        {
+            self.target.previous_aim_punch.lerp(raw_punch, 0.5)
+        } else {
+            raw_punch
+        };
+        self.target.previous_aim_punch = aim_punch;
 
         let max_fov_units = aimbot_config.fov;
         let eye_position = local_player.eye_position(self);
@@ -142,6 +160,13 @@ impl CS2 {
         }
 
         let target_friendlies = aimbot_config.target_friendlies;
+
+        let latency = if aimbot_config.auto_extrapolation {
+            calculate_latency_seconds(self, &local_player) + aimbot_config.prediction_time
+        } else {
+            aimbot_config.prediction_time
+        }
+        .clamp(0.0, 0.35);
 
         for player in &self.players {
             if !player.is_valid(self) {
@@ -158,7 +183,14 @@ impl CS2 {
                 continue;
             }
 
-            let approx_angle = self.angle_to_target(&local_player, &player_pos, &aim_punch);
+            let target_translation = if latency > 0.0 {
+                extrapolation_translation(player.velocity(self), player.is_in_air(self), latency)
+            } else {
+                Vec3::ZERO
+            };
+
+            let approx_target_pos = player_pos + target_translation;
+            let approx_angle = self.angle_to_target(&local_player, &approx_target_pos, &aim_punch);
             let approx_fov = angles_to_fov(&view_angles, &approx_angle);
             if let Some(approx_offset) = forward_ray_offset(approx_dist, approx_fov)
                 && approx_offset > max_fov_units + 120.0
@@ -176,13 +208,15 @@ impl CS2 {
                 let wall_min_damage =
                     triggerbot_config.min_damage.min(player.health(self)).max(1) as f32;
                 for point in multipoints(hit, eye_position) {
-                    let distance = eye_position.distance(point);
+                    let eval_point = point + target_translation;
+                    let distance = eye_position.distance(eval_point);
                     if distance < 1.0
-                        || (aimbot_config.smoke_check && self.is_line_in_smoke(eye_position, point))
+                        || (aimbot_config.smoke_check
+                            && self.is_line_in_smoke(eye_position, eval_point))
                     {
                         continue;
                     }
-                    let angle = self.angle_to_target(&local_player, &point, &aim_punch);
+                    let angle = self.angle_to_target(&local_player, &eval_point, &aim_punch);
                     let fov_deg = angles_to_fov(&view_angles, &angle);
                     let Some(offset_units) = forward_ray_offset(distance, fov_deg) else {
                         continue;
@@ -203,6 +237,7 @@ impl CS2 {
                         bone_index: hit.bone.u64(),
                         bone: hit.bone,
                         position: point,
+                        eval_position: eval_point,
                         metric,
                         allow_penetration,
                         min_damage: wall_min_damage,
@@ -216,7 +251,7 @@ impl CS2 {
             self.evaluate_shot_path(
                 &local_player,
                 &candidate.player,
-                candidate.position,
+                candidate.eval_position,
                 candidate.bone,
                 candidate.allow_penetration,
                 1,

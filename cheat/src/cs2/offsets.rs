@@ -227,6 +227,7 @@ schema! {
             rank_type: schema("CCSPlayerController", "m_iCompetitiveRankType"),
             action_tracking_services: schema("CCSPlayerController", "m_pActionTrackingServices"),
             tick_base: schema_opt("CBasePlayerController", "m_nTickBase"),
+            ping: schema_opt("CCSPlayerController", "m_iPing"),
         }
         entity: EntityOffsets {
             health: schema("C_BaseEntity", "m_iHealth"),
@@ -262,6 +263,7 @@ schema! {
             weapon_services: schema("C_BasePlayerPawn", "m_pWeaponServices"),
             aim_punch_services: schema("C_CSPlayerPawn", "m_pAimPunchServices"),
             bullet_services: schema("C_CSPlayerPawn", "m_pBulletServices"),
+            movement_services: schema("C_BasePlayerPawn", "m_pMovementServices"),
         }
         game_scene_node: GameSceneNodeOffsets {
             dormant: schema("CGameSceneNode", "m_bDormant"),
@@ -306,6 +308,9 @@ schema! {
         }
         bullet_services: BulletServicesOffsets {
             total_hits: schema("CCSPlayer_BulletServices", "m_totalHitsOnServer"),
+        }
+        movement_services: MovementServicesOffsets {
+            buttons: schema("CPlayer_MovementServices", "m_nButtons"),
         }
         per_round_stats: PerRoundStatsOffsets {
             kills: schema("CSPerRoundStats_t", "m_iKills"),

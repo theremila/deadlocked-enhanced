@@ -520,47 +520,138 @@ impl AppState {
         player: &PlayerData,
         data: &Data,
     ) -> Option<(Pos2, Pos2, Pos2, Pos2)> {
-        let min = player.collision_mins;
-        let max = player.collision_maxs;
-        if !min.is_finite() || !max.is_finite() || min.cmpgt(max).any() || min == max {
-            return None;
-        }
-        const SAMPLES: usize = CYLINDER_SAMPLES;
-        let center = (min + max) * 0.5;
-        let radius = 0.5 * (max.x - min.x).abs().max((max.y - min.y).abs());
-        let mut points = [Pos2::ZERO; CYLINDER_SAMPLES * 2];
-        for layer in 0..2 {
-            let z = if layer == 0 { min.z } else { max.z };
-            for i in 0..SAMPLES {
-                let angle = std::f32::consts::TAU * i as f32 / SAMPLES as f32;
-                let local = glam::Vec3::new(
-                    center.x + radius * angle.cos(),
-                    center.y + radius * angle.sin(),
-                    z,
-                );
-                points[layer * SAMPLES + i] =
-                    world_to_screen(&player.collision_transform.transform_point3(local), data)?;
+        let distance = data
+            .local_player
+            .position
+            .distance(player.position)
+            .max(1.0);
+        let esp_scale = (500.0 / distance).clamp(0.4, 1.0);
+
+        let mut min_x = f32::INFINITY;
+        let mut max_x = f32::NEG_INFINITY;
+        let mut min_y = f32::INFINITY;
+        let mut max_y = f32::NEG_INFINITY;
+        let mut points_count = 0usize;
+
+        let mut consider = |sp: Pos2| {
+            min_x = min_x.min(sp.x);
+            max_x = max_x.max(sp.x);
+            min_y = min_y.min(sp.y);
+            max_y = max_y.max(sp.y);
+            points_count += 1;
+        };
+
+        for (&bone, &world_pos) in &player.bones {
+            if let Some(sp) = world_to_screen(&world_pos, data) {
+                consider(sp);
+            }
+            if bone == Bones::Head {
+                if let Some(top_head) =
+                    world_to_screen(&(world_pos + glam::vec3(0.0, 0.0, 9.0)), data)
+                {
+                    consider(top_head);
+                }
+            }
+            if bone == Bones::LeftFoot || bone == Bones::RightFoot {
+                if let Some(sole) =
+                    world_to_screen(&(world_pos - glam::vec3(0.0, 0.0, 4.0)), data)
+                {
+                    consider(sole);
+                }
             }
         }
-        let left = (0..SAMPLES).min_by(|a, b| {
-            points[*a]
-                .x
-                .min(points[*a + SAMPLES].x)
-                .partial_cmp(&points[*b].x.min(points[*b + SAMPLES].x))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })?;
-        let right = (0..SAMPLES).max_by(|a, b| {
-            points[*a]
-                .x
-                .max(points[*a + SAMPLES].x)
-                .partial_cmp(&points[*b].x.max(points[*b + SAMPLES].x))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })?;
+
+        if let Some(origin) = world_to_screen(&player.position, data) {
+            consider(origin);
+        }
+        if player.head.length_squared() > 1.0 {
+            if let Some(head_top) =
+                world_to_screen(&(player.head + glam::vec3(0.0, 0.0, 9.0)), data)
+            {
+                consider(head_top);
+            }
+        }
+
+        if points_count >= 4 {
+            let pad_x = ((max_x - min_x) * 0.08).clamp(3.0 * esp_scale, 10.0 * esp_scale);
+            let pad_y = 2.0 * esp_scale;
+
+            let min_x = min_x - pad_x;
+            let max_x = max_x + pad_x;
+            let min_y = min_y - pad_y;
+            let max_y = max_y + pad_y;
+
+            return Some((
+                pos2(min_x, min_y),
+                pos2(max_x, min_y),
+                pos2(min_x, max_y),
+                pos2(max_x, max_y),
+            ));
+        }
+
+        let min = player.collision_mins;
+        let max = player.collision_maxs;
+        if min.is_finite() && max.is_finite() && !min.cmpgt(max).any() && min != max {
+            const SAMPLES: usize = CYLINDER_SAMPLES;
+            let center = (min + max) * 0.5;
+            let radius = 0.5 * (max.x - min.x).abs().max((max.y - min.y).abs());
+            let mut cyl_min_x = f32::INFINITY;
+            let mut cyl_max_x = f32::NEG_INFINITY;
+            let mut cyl_min_y = f32::INFINITY;
+            let mut cyl_max_y = f32::NEG_INFINITY;
+            let mut cyl_count = 0usize;
+
+            for layer in 0..2 {
+                let z = if layer == 0 { min.z } else { max.z };
+                for i in 0..SAMPLES {
+                    let angle = std::f32::consts::TAU * i as f32 / SAMPLES as f32;
+                    let local = glam::Vec3::new(
+                        center.x + radius * angle.cos(),
+                        center.y + radius * angle.sin(),
+                        z,
+                    );
+                    if let Some(sp) =
+                        world_to_screen(&player.collision_transform.transform_point3(local), data)
+                    {
+                        cyl_min_x = cyl_min_x.min(sp.x);
+                        cyl_max_x = cyl_max_x.max(sp.x);
+                        cyl_min_y = cyl_min_y.min(sp.y);
+                        cyl_max_y = cyl_max_y.max(sp.y);
+                        cyl_count += 1;
+                    }
+                }
+            }
+            if cyl_count >= 4 {
+                return Some((
+                    pos2(cyl_min_x, cyl_min_y),
+                    pos2(cyl_max_x, cyl_min_y),
+                    pos2(cyl_min_x, cyl_max_y),
+                    pos2(cyl_max_x, cyl_max_y),
+                ));
+            }
+        }
+
+        let top_pos = if player.head.length_squared() > 1.0 {
+            player.head + glam::vec3(0.0, 0.0, 9.0)
+        } else {
+            player.position + glam::vec3(0.0, 0.0, 72.0)
+        };
+        let bot_pos = player.position;
+        let top = world_to_screen(&top_pos, data)?;
+        let bot = world_to_screen(&bot_pos, data)?;
+        let height = (bot.y - top.y).abs();
+        let width = height * 0.45;
+        let center_x = (top.x + bot.x) * 0.5;
+        let min_x = center_x - width * 0.5;
+        let max_x = center_x + width * 0.5;
+        let min_y = top.y.min(bot.y);
+        let max_y = top.y.max(bot.y);
+
         Some((
-            points[left + SAMPLES],
-            points[right + SAMPLES],
-            points[left],
-            points[right],
+            pos2(min_x, min_y),
+            pos2(max_x, min_y),
+            pos2(min_x, max_y),
+            pos2(max_x, max_y),
         ))
     }
 

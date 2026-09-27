@@ -90,15 +90,11 @@ const AXIS_Y: u16 = 0x01;
 const AXIS_WHEEL: u16 = 0x08;
 const BTN_LEFT: u16 = 0x110;
 const KEY_SPACE: u16 = 57;
-const KEY_W: u16 = 17;
-const KEY_A: u16 = 30;
-const KEY_S: u16 = 31;
-const KEY_D: u16 = 32;
 
 pub struct Mouse {
     file: File,
     fractional: Vec2,
-    counter_strafe_keys: [bool; 4],
+    active_counter_keys: Vec<u16>,
 }
 
 static CREATED: AtomicBool = AtomicBool::new(false);
@@ -124,11 +120,9 @@ impl Mouse {
             ui_set_relbit(fd, AXIS_WHEEL as u64).map_err(|e| e.to_string())?;
 
             ui_set_keybit(fd, BTN_LEFT as u64).map_err(|e| e.to_string())?;
-            ui_set_keybit(fd, KEY_SPACE as u64).map_err(|e| e.to_string())?;
-            ui_set_keybit(fd, KEY_W as u64).map_err(|e| e.to_string())?;
-            ui_set_keybit(fd, KEY_A as u64).map_err(|e| e.to_string())?;
-            ui_set_keybit(fd, KEY_S as u64).map_err(|e| e.to_string())?;
-            ui_set_keybit(fd, KEY_D as u64).map_err(|e| e.to_string())?;
+            for code in 1..=248 {
+                let _ = ui_set_keybit(fd, code as u64);
+            }
 
             ui_dev_setup(fd, &DEVICE_SETUP).map_err(|e| e.to_string())?;
             ui_dev_create(fd).map_err(|e| e.to_string())?;
@@ -137,8 +131,22 @@ impl Mouse {
         Ok(Self {
             file,
             fractional: Vec2::ZERO,
-            counter_strafe_keys: [false; 4],
+            active_counter_keys: Vec::new(),
         })
+    }
+
+    #[cfg(test)]
+    pub fn dummy() -> Self {
+        Self {
+            file: File::options().write(true).open("/dev/null").unwrap(),
+            fractional: Vec2::ZERO,
+            active_counter_keys: Vec::new(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn is_counter_key_active(&self, key: u16) -> bool {
+        self.active_counter_keys.contains(&key)
     }
 
     pub fn move_rel(&mut self, coords: Vec2) -> bool {
@@ -206,22 +214,24 @@ impl Mouse {
             microseconds: now.subsec_micros() as u64,
         };
 
-        let wheel = InputEvent {
-            time,
-            event_type: EV_REL,
-            code: AXIS_WHEEL,
-            value: -(count.min(i32::MAX as usize) as i32),
-        };
+        for _ in 0..count.min(8) {
+            let wheel = InputEvent {
+                time,
+                event_type: EV_REL,
+                code: AXIS_WHEEL,
+                value: -1,
+            };
 
-        let syn = InputEvent {
-            time,
-            event_type: EV_SYN,
-            code: SYN_REPORT,
-            value: 0,
-        };
+            let syn = InputEvent {
+                time,
+                event_type: EV_SYN,
+                code: SYN_REPORT,
+                value: 0,
+            };
 
-        let _ = self.file.write_all(&wheel.bytes());
-        let _ = self.file.write_all(&syn.bytes());
+            let _ = self.file.write_all(&wheel.bytes());
+            let _ = self.file.write_all(&syn.bytes());
+        }
     }
 
     pub fn left_press(&mut self) {
@@ -240,27 +250,83 @@ impl Mouse {
         self.key(KEY_SPACE, 0);
     }
 
+    pub fn counter_strafe_dynamic(
+        &mut self,
+        forward_vel: f32,
+        side_vel: f32,
+        threshold: f32,
+        keys: crate::cs2::key_codes::MovementKeys,
+    ) {
+        let mut desired = [0u16; 2];
+        let mut count = 0;
+        if forward_vel > threshold {
+            desired[count] = keys.back;
+            count += 1;
+        } else if forward_vel < -threshold {
+            desired[count] = keys.forward;
+            count += 1;
+        }
+        // In Source 2 coordinates (+X Forward, +Y Left):
+        // side_vel > threshold means moving left -> counter by pressing right (D).
+        // side_vel < -threshold means moving right -> counter by pressing left (A).
+        if side_vel > threshold {
+            desired[count] = keys.right;
+            count += 1;
+        } else if side_vel < -threshold {
+            desired[count] = keys.left;
+            count += 1;
+        }
+        self.set_counter_keys(&desired[..count]);
+    }
+
+    #[allow(dead_code)]
     pub fn counter_strafe(&mut self, forward_vel: f32, side_vel: f32, threshold: f32) {
-        self.set_counter_strafe_keys([
-            forward_vel < -threshold,
-            side_vel > threshold,
-            forward_vel > threshold,
-            side_vel < -threshold,
-        ]);
+        self.counter_strafe_dynamic(
+            forward_vel,
+            side_vel,
+            threshold,
+            crate::cs2::key_codes::MovementKeys::default(),
+        );
     }
 
     pub fn release_counter_strafe(&mut self) {
-        self.set_counter_strafe_keys([false; 4]);
+        let mut keys = [0u16; 4];
+        let len = self.active_counter_keys.len().min(4);
+        keys[..len].copy_from_slice(&self.active_counter_keys[..len]);
+        self.active_counter_keys.clear();
+        for &key in &keys[..len] {
+            self.key(key, 0);
+        }
     }
 
-    fn set_counter_strafe_keys(&mut self, next: [bool; 4]) {
-        const KEYS: [u16; 4] = [KEY_W, KEY_A, KEY_S, KEY_D];
-        for index in 0..KEYS.len() {
-            if self.counter_strafe_keys[index] != next[index] {
-                self.key(KEYS[index], i32::from(next[index]));
+    pub fn set_counter_keys(&mut self, desired: &[u16]) {
+        let mut keys_to_release = [0u16; 4];
+        let mut release_count = 0;
+        for &key in &self.active_counter_keys {
+            if !desired.contains(&key) && release_count < 4 {
+                keys_to_release[release_count] = key;
+                release_count += 1;
             }
         }
-        self.counter_strafe_keys = next;
+
+        let mut keys_to_press = [0u16; 4];
+        let mut press_count = 0;
+        for &key in desired {
+            if !self.active_counter_keys.contains(&key) && press_count < 4 {
+                keys_to_press[press_count] = key;
+                press_count += 1;
+            }
+        }
+
+        for &key in &keys_to_release[..release_count] {
+            self.key(key, 0);
+        }
+        for &key in &keys_to_press[..press_count] {
+            self.key(key, 1);
+        }
+
+        self.active_counter_keys.clear();
+        self.active_counter_keys.extend_from_slice(desired);
     }
 
     fn key(&mut self, code: u16, pressed: i32) {
@@ -312,4 +378,64 @@ pub fn check_uinput() -> bool {
         return false;
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cs2::key_codes::MovementKeys;
+
+    #[test]
+    fn counter_strafe_dynamic_tracks_and_releases_keys() {
+        let mut mouse = Mouse::dummy();
+        let wasd = MovementKeys::default();
+
+        // Forward motion engages BACK key
+        mouse.counter_strafe_dynamic(100.0, 0.0, 5.0, wasd);
+        assert!(mouse.is_counter_key_active(wasd.back));
+        assert!(!mouse.is_counter_key_active(wasd.forward));
+
+        // Reversing to backward motion releases BACK and engages FORWARD
+        mouse.counter_strafe_dynamic(-100.0, 0.0, 5.0, wasd);
+        assert!(!mouse.is_counter_key_active(wasd.back));
+        assert!(mouse.is_counter_key_active(wasd.forward));
+
+        // Diagonal motion: forward (+X) + left (+Y) velocity -> back + right keys
+        mouse.counter_strafe_dynamic(50.0, 50.0, 5.0, wasd);
+        assert!(mouse.is_counter_key_active(wasd.back));
+        assert!(mouse.is_counter_key_active(wasd.right));
+        assert!(!mouse.is_counter_key_active(wasd.left));
+
+        // Diagonal motion: forward (+X) + right (-Y) velocity -> back + left keys
+        mouse.counter_strafe_dynamic(50.0, -50.0, 5.0, wasd);
+        assert!(mouse.is_counter_key_active(wasd.back));
+        assert!(mouse.is_counter_key_active(wasd.left));
+        assert!(!mouse.is_counter_key_active(wasd.right));
+
+        // Full release clears all keys
+        mouse.release_counter_strafe();
+        assert!(mouse.active_counter_keys.is_empty());
+        assert!(!mouse.is_counter_key_active(wasd.back));
+        assert!(!mouse.is_counter_key_active(wasd.left));
+        assert!(!mouse.is_counter_key_active(wasd.right));
+    }
+
+    #[test]
+    fn custom_movement_keys_esdf_counter_strafe() {
+        let mut mouse = Mouse::dummy();
+        let esdf = MovementKeys {
+            forward: 18, // E
+            back: 32,    // D
+            left: 31,    // S
+            right: 33,   // F
+        };
+
+        // Forward motion engages D (32), NOT standard S (31)
+        mouse.counter_strafe_dynamic(80.0, 0.0, 5.0, esdf);
+        assert!(mouse.is_counter_key_active(32));
+        assert!(!mouse.is_counter_key_active(31));
+
+        mouse.release_counter_strafe();
+        assert!(mouse.active_counter_keys.is_empty());
+    }
 }

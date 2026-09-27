@@ -98,6 +98,8 @@ impl Config {
                     AimSetting::FlashCheck => value.flash_check,
                     AimSetting::InAirCheck => value.in_air_check,
                     AimSetting::Humanize => value.humanize,
+                    AimSetting::AutoExtrapolation => value.auto_extrapolation,
+                    AimSetting::Interpolation => value.interpolation,
                 }
             }
             SettingId::Trigger(profile, setting) => {
@@ -107,6 +109,9 @@ impl Config {
                     TriggerSetting::Enabled => value.enabled,
                     TriggerSetting::PreferAimTarget => value.prefer_aim_target,
                     TriggerSetting::AutoStop => value.autostop,
+                    TriggerSetting::AutoStopEarly => value.autostop_early,
+                    TriggerSetting::AutoStopBetweenShots => value.autostop_between_shots,
+                    TriggerSetting::AutoStopInAir => value.autostop_in_air,
                     TriggerSetting::VisibilityCheck => value.visibility_check,
                     TriggerSetting::ThroughWalls => value.through_walls,
                     TriggerSetting::SmokeCheck => value.smoke_check,
@@ -116,6 +121,7 @@ impl Config {
                     TriggerSetting::VelocityCheck => value.velocity_check,
                     TriggerSetting::HeadOnly => value.head_only,
                     TriggerSetting::PreferCenter => value.prefer_center,
+                    TriggerSetting::AutoExtrapolation => value.auto_extrapolation,
                 }
             }
             SettingId::Rcs(profile, setting) => {
@@ -179,6 +185,8 @@ impl Config {
                     AimSetting::FlashCheck => value.flash_check = enabled,
                     AimSetting::InAirCheck => value.in_air_check = enabled,
                     AimSetting::Humanize => value.humanize = enabled,
+                    AimSetting::AutoExtrapolation => value.auto_extrapolation = enabled,
+                    AimSetting::Interpolation => value.interpolation = enabled,
                 }
             }
             SettingId::Trigger(profile, setting) => {
@@ -188,6 +196,9 @@ impl Config {
                     TriggerSetting::Enabled => value.enabled = enabled,
                     TriggerSetting::PreferAimTarget => value.prefer_aim_target = enabled,
                     TriggerSetting::AutoStop => value.autostop = enabled,
+                    TriggerSetting::AutoStopEarly => value.autostop_early = enabled,
+                    TriggerSetting::AutoStopBetweenShots => value.autostop_between_shots = enabled,
+                    TriggerSetting::AutoStopInAir => value.autostop_in_air = enabled,
                     TriggerSetting::VisibilityCheck => value.visibility_check = enabled,
                     TriggerSetting::ThroughWalls => value.through_walls = enabled,
                     TriggerSetting::SmokeCheck => value.smoke_check = enabled,
@@ -197,6 +208,7 @@ impl Config {
                     TriggerSetting::VelocityCheck => value.velocity_check = enabled,
                     TriggerSetting::HeadOnly => value.head_only = enabled,
                     TriggerSetting::PreferCenter => value.prefer_center = enabled,
+                    TriggerSetting::AutoExtrapolation => value.auto_extrapolation = enabled,
                 }
             }
             SettingId::Rcs(profile, setting) => {

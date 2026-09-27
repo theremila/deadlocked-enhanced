@@ -1,22 +1,5 @@
 use egui::Color32;
 use serde::{Deserialize, Serialize};
-use strum::EnumIter;
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, EnumIter)]
-pub enum BunnyhopMode {
-    Legit,
-    Full,
-}
-
-impl std::fmt::Display for BunnyhopMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Legit => "Legit",
-            Self::Full => "Full",
-        }
-        .fmt(f)
-    }
-}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -29,7 +12,8 @@ pub struct UnsafeConfig {
     pub change_smoke_color: bool,
     pub smoke_color: Color32,
     pub bunnyhop: bool,
-    pub bunnyhop_mode: BunnyhopMode,
+    pub bunnyhop_legit: bool,
+    pub bunnyhop_subtick: bool,
 }
 
 impl Default for UnsafeConfig {
@@ -43,7 +27,8 @@ impl Default for UnsafeConfig {
             change_smoke_color: false,
             smoke_color: Color32::RED,
             bunnyhop: false,
-            bunnyhop_mode: BunnyhopMode::Full,
+            bunnyhop_legit: false,
+            bunnyhop_subtick: true,
         }
     }
 }

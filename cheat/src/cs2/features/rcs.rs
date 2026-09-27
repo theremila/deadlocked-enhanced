@@ -76,7 +76,7 @@ impl Default for Recoil {
 }
 
 impl Recoil {
-    fn reset_smoothing(&mut self) {
+    pub(crate) fn reset_smoothing(&mut self) {
         self.velocity = Vec2::ZERO;
         self.accel_history.clear();
         self.next_update = None;

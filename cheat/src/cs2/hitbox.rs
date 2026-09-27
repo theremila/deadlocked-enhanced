@@ -56,6 +56,28 @@ pub fn bone_radius(bone: Bones) -> f32 {
     }
 }
 
+pub const ALL_BONES: [Bones; 19] = [
+    Bones::Head,
+    Bones::Neck,
+    Bones::Spine4,
+    Bones::Spine3,
+    Bones::Spine2,
+    Bones::Spine1,
+    Bones::Hip,
+    Bones::LeftShoulder,
+    Bones::LeftElbow,
+    Bones::LeftHand,
+    Bones::RightShoulder,
+    Bones::RightElbow,
+    Bones::RightHand,
+    Bones::LeftHip,
+    Bones::LeftKnee,
+    Bones::LeftFoot,
+    Bones::RightHip,
+    Bones::RightKnee,
+    Bones::RightFoot,
+];
+
 pub fn spheres_from_bones(
     all_bones: &std::collections::HashMap<Bones, Vec3>,
     bones: &[Bones],
@@ -126,6 +148,9 @@ pub fn ray_hits_capsule(origin: Vec3, direction: Vec3, capsule: HitCapsule) -> b
 
 fn ray_sphere_distance(origin: Vec3, direction: Vec3, center: Vec3, radius: f32) -> Option<f32> {
     let offset = origin - center;
+    if offset.length_squared() <= radius * radius {
+        return Some(0.0);
+    }
     let projected = offset.dot(direction);
     let discriminant = projected * projected - (offset.length_squared() - radius * radius);
     if discriminant < 0.0 {
@@ -142,6 +167,12 @@ fn ray_capsule_distance(origin: Vec3, direction: Vec3, capsule: HitCapsule) -> O
     let axis_sq = axis.length_squared();
     if axis_sq <= f32::EPSILON {
         return ray_sphere_distance(origin, direction, capsule.start, capsule.radius);
+    }
+
+    let t = (offset.dot(axis) / axis_sq).clamp(0.0, 1.0);
+    let closest_point = capsule.start + axis * t;
+    if (origin - closest_point).length_squared() <= capsule.radius * capsule.radius {
+        return Some(0.0);
     }
 
     let axis_ray = axis.dot(direction);
@@ -172,6 +203,7 @@ fn ray_capsule_distance(origin: Vec3, direction: Vec3, capsule: HitCapsule) -> O
     }
 }
 
+#[allow(dead_code)]
 pub fn ray_hits_volumes(
     origin: Vec3,
     direction: Vec3,
@@ -238,6 +270,60 @@ pub fn ray_hit_volumes_translated(
     }
 
     nearest
+}
+
+pub fn ray_all_hit_volumes_translated(
+    origin: Vec3,
+    direction: Vec3,
+    hit_spheres: &[HitSphere],
+    hit_capsules: &[HitCapsule],
+    translation: Vec3,
+) -> Vec<RayVolumeHit> {
+    let direction = direction.normalize_or_zero();
+    if direction == Vec3::ZERO {
+        return Vec::new();
+    }
+
+    let mut hits = Vec::with_capacity(hit_spheres.len() + hit_capsules.len());
+
+    for hit in hit_spheres {
+        let center = hit.center + translation;
+        let Some(distance) = ray_sphere_distance(origin, direction, center, hit.radius) else {
+            continue;
+        };
+        hits.push(RayVolumeHit {
+            point: origin + direction * distance,
+            distance,
+            bone: hit.bone,
+        });
+    }
+
+    for capsule in hit_capsules {
+        let translated = HitCapsule {
+            start: capsule.start + translation,
+            end: capsule.end + translation,
+            radius: capsule.radius,
+        };
+        let Some(distance) = ray_capsule_distance(origin, direction, translated) else {
+            continue;
+        };
+        let point = origin + direction * distance;
+        let bone = hit_spheres
+            .iter()
+            .min_by(|left, right| {
+                (left.center + translation)
+                    .distance_squared(point)
+                    .total_cmp(&(right.center + translation).distance_squared(point))
+            })
+            .map_or(Bones::Spine3, |hit| hit.bone);
+        hits.push(RayVolumeHit {
+            point,
+            distance,
+            bone,
+        });
+    }
+
+    hits
 }
 
 impl CS2 {

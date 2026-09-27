@@ -24,7 +24,7 @@ static MATERIAL_BUILD: LazyLock<Mutex<MaterialBuildState>> =
 
 pub fn read_map(cs2: &CS2, map_name: &str) -> Option<Bvh> {
     let map_name = map_name.trim_end_matches(".vpk");
-    if map_name.is_empty() {
+    if map_name.is_empty() || map_name == "<empty>" {
         return runtime_bvh(cs2);
     }
 

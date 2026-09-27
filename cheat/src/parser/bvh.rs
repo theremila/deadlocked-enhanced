@@ -314,6 +314,9 @@ impl Bvh {
     pub fn has_line_of_sight(&self, start: Vec3, end: Vec3) -> bool {
         let dir = end - start;
         let distance = dir.length();
+        if distance <= 0.001 {
+            return true;
+        }
 
         let dir_norm = dir / distance;
         let inv_dir = 1.0 / dir_norm;

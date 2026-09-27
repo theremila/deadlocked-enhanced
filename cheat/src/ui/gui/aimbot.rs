@@ -259,6 +259,14 @@ impl AppState {
         ) {
             self.send_config();
         }
+        if self.bool_setting_hover(
+            ui,
+            "Auto Extrapolation",
+            Some("Automatically lead moving targets using latency, tickrate, and velocity with gravity"),
+            self.aim_id(AimSetting::AutoExtrapolation),
+        ) {
+            self.send_config();
+        }
         if drag(
             ui,
             "Start Bullet",
@@ -290,6 +298,14 @@ impl AppState {
                 ) {
                     self.send_config();
                 }
+            }
+            if self.bool_setting_hover(
+                ui,
+                "Smooth Interpolation",
+                Some("Use low-frequency organic drift and smooth mouse interpolation instead of high-frequency tremor to eliminate spectator jitter"),
+                self.aim_id(AimSetting::Interpolation),
+            ) {
+                self.send_config();
             }
         });
 
@@ -468,12 +484,47 @@ impl AppState {
         }
         if self.bool_setting_hover(
             ui,
+            "Auto Extrapolation",
+            Some("Automatically extrapolate enemy hitboxes using latency and velocity across all modes"),
+            self.trigger_id(TriggerSetting::AutoExtrapolation),
+        ) {
+            self.send_config();
+        }
+        if self.bool_setting_hover(
+            ui,
             "Auto Stop",
-            Some("Experimental: counter-strafe until the weapon reaches accurate speed"),
+            Some("Counter-strafe until the weapon reaches accurate speed"),
             self.trigger_id(TriggerSetting::AutoStop),
         ) {
             self.send_config();
         }
+        let autostop = self.weapon_config().triggerbot.autostop;
+        ui.add_enabled_ui(autostop, |ui| {
+            if self.bool_setting_hover(
+                ui,
+                "Early Stop",
+                Some("Counter-strafe immediately upon target acquisition or delay phase"),
+                self.trigger_id(TriggerSetting::AutoStopEarly),
+            ) {
+                self.send_config();
+            }
+            if self.bool_setting_hover(
+                ui,
+                "Between Shots",
+                Some("Allow movement during weapon attack recovery cooldown"),
+                self.trigger_id(TriggerSetting::AutoStopBetweenShots),
+            ) {
+                self.send_config();
+            }
+            if self.bool_setting_hover(
+                ui,
+                "In Air Stop",
+                Some("Permit counter-strafing while airborne"),
+                self.trigger_id(TriggerSetting::AutoStopInAir),
+            ) {
+                self.send_config();
+            }
+        });
         if drag(
             ui,
             "Hold Duration",

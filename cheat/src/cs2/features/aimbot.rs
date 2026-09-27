@@ -6,7 +6,11 @@ use shared::{Bones, WeaponClass};
 use crate::{
     config::Config,
     constants::timing,
-    cs2::{CS2, entity::player::Player},
+    cs2::{
+        CS2,
+        entity::player::Player,
+        extrapolation::{calculate_latency_seconds, extrapolate_position},
+    },
     math::{angles_to_fov, forward_ray_offset, vec2_clamp},
     os::mouse::Mouse,
 };
@@ -173,8 +177,18 @@ impl CS2 {
             .copied()
             .find(|bone| bone.u64() == self.target.bone_index)
             .unwrap_or(Bones::Head);
-        let target_point =
-            self.target.position + target.velocity(self) * config.prediction_time.clamp(0.0, 0.25);
+        let prediction_time = if config.auto_extrapolation {
+            calculate_latency_seconds(self, &local_player) + config.prediction_time
+        } else {
+            config.prediction_time
+        }
+        .clamp(0.0, 0.35);
+        let target_point = extrapolate_position(
+            self.target.position,
+            target.velocity(self),
+            target.is_in_air(self),
+            prediction_time,
+        );
 
         if !target_point.is_finite()
             || (config.smoke_check && self.is_line_in_smoke(eye_pos, target_point))
@@ -271,11 +285,19 @@ impl CS2 {
             }
 
             if config.tremor > 0.0 {
-                let t = tracking_time.as_secs_f32() * 25.0;
-                let tremor_x = (t * 11.3).sin() * (t * 7.7).cos();
-                let tremor_y = (t * 13.1).cos() * (t * 9.5).sin();
-                let scale = config.tremor * 0.08 * (current_fov / 3.0).clamp(0.05, 1.0);
-                aim_angles += vec2(tremor_x, tremor_y) * scale;
+                if config.interpolation {
+                    let t = tracking_time.as_secs_f32() * 2.5;
+                    let drift_x = (t * 1.7).sin() * 0.7 + (t * 0.9).cos() * 0.3;
+                    let drift_y = (t * 1.3).cos() * 0.7 + (t * 1.1).sin() * 0.3;
+                    let scale = config.tremor * 0.03 * (current_fov / 3.0).clamp(0.02, 1.0);
+                    aim_angles += vec2(drift_x, drift_y) * scale;
+                } else {
+                    let t = tracking_time.as_secs_f32() * 25.0;
+                    let tremor_x = (t * 11.3).sin() * (t * 7.7).cos();
+                    let tremor_y = (t * 13.1).cos() * (t * 9.5).sin();
+                    let scale = config.tremor * 0.08 * (current_fov / 3.0).clamp(0.05, 1.0);
+                    aim_angles += vec2(tremor_x, tremor_y) * scale;
+                }
             }
 
             vec2_clamp(&mut aim_angles);
@@ -320,6 +342,7 @@ impl CS2 {
         }
 
         self.recoil.previous = local_player.aim_punch(self);
+        self.recoil.reset_smoothing();
 
         true
     }

@@ -6,7 +6,7 @@ use crate::{
         app::AppState,
         gui::{
             FeatureSettingsPopup,
-            helpers::{collapsing_open, color_picker, combo_box, scroll},
+            helpers::{collapsing_open, color_picker, scroll},
         },
     },
 };
@@ -111,12 +111,18 @@ impl AppState {
     }
 
     fn bunnyhop_details(&mut self, ui: &mut Ui) {
-        if combo_box(
-            ui,
-            "bunnyhop_mode",
-            "Mode",
-            &mut self.config.misc.bunnyhop_mode,
-        ) {
+        let mut changed = false;
+        ui.vertical(|ui| {
+            changed |= ui
+                .checkbox(&mut self.config.misc.bunnyhop_legit, "Legit")
+                .on_hover_text("Humanizes jump timings, randomizes hop success, and avoids unnatural velocity spikes")
+                .changed();
+            changed |= ui
+                .checkbox(&mut self.config.misc.bunnyhop_subtick, "Subtick mode")
+                .on_hover_text("Uses landing prediction to time jumps before subtick ground friction decelerates velocity")
+                .changed();
+        });
+        if changed {
             self.send_config();
         }
     }

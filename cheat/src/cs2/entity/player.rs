@@ -112,6 +112,14 @@ impl Player {
             .read(self.controller + cs2.offsets.controller.steam_id)
     }
 
+    pub fn ping(&self, cs2: &CS2) -> u32 {
+        cs2.offsets
+            .controller
+            .ping
+            .map(|offset| cs2.process.read::<u32>(self.controller + offset))
+            .unwrap_or(0)
+    }
+
     pub fn money(&self, cs2: &CS2) -> i32 {
         let services: usize = cs2
             .process
@@ -597,7 +605,59 @@ impl Player {
                 .write(camera_service + cs2.offsets.camera_services.fov, value);
         }
     }
+
+    pub fn movement_services(&self, cs2: &CS2) -> Option<usize> {
+        let ms: usize = cs2
+            .process
+            .read(*self.pawn + cs2.offsets.pawn.movement_services);
+        if ms == 0 {
+            None
+        } else {
+            Some(ms)
+        }
+    }
+
+    pub fn buttons(&self, cs2: &CS2) -> u64 {
+        let Some(ms) = self.movement_services(cs2) else {
+            return 0;
+        };
+        // CInButtonState struct in Source 2:
+        // +0x00: vtable pointer (8 bytes)
+        // +0x08: m_pButtonStates[0] (active held buttons bitmask)
+        cs2.process
+            .read(ms + cs2.offsets.movement_services.buttons + 0x08)
+    }
+
+    pub fn is_jump_pressed(&self, cs2: &CS2) -> bool {
+        self.buttons(cs2) & IN_JUMP != 0
+    }
 }
+
+#[allow(dead_code)]
+pub const IN_ATTACK: u64 = 1 << 0;
+pub const IN_JUMP: u64 = 1 << 1;
+#[allow(dead_code)]
+pub const IN_FORWARD: u64 = 1 << 3;
+#[allow(dead_code)]
+pub const IN_BACK: u64 = 1 << 4;
+#[allow(dead_code)]
+pub const IN_USE: u64 = 1 << 5;
+#[allow(dead_code)]
+pub const IN_CANCEL: u64 = 1 << 6;
+#[allow(dead_code)]
+pub const IN_LEFT: u64 = 1 << 7;
+#[allow(dead_code)]
+pub const IN_RIGHT: u64 = 1 << 8;
+#[allow(dead_code)]
+pub const IN_MOVELEFT: u64 = 1 << 9;
+#[allow(dead_code)]
+pub const IN_MOVERIGHT: u64 = 1 << 10;
+#[allow(dead_code)]
+pub const IN_SECOND_ATTACK: u64 = 1 << 11;
+#[allow(dead_code)]
+pub const IN_RUN: u64 = 1 << 12;
+#[allow(dead_code)]
+pub const IN_RELOAD: u64 = 1 << 13;
 
 impl Deref for Player {
     type Target = BaseEntity;
